@@ -2610,3 +2610,17 @@ tbody tr:hover td {
   font-size: 0.82rem;
   font-weight: 600;
 }
+
+/* 원금 기준점·기록에서 계산되는 보유 내역 (직접 입력 불가) */
+.derived-input {
+  background: #f8fafc !important;
+  color: var(--text-muted) !important;
+  cursor: default;
+}
+
+.derived-input-hint {
+  margin: 8px 2px 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}

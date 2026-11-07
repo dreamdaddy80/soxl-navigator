@@ -15,6 +15,7 @@ const DEFAULT_STATE = {
       baseShares: 100,
       baseAvgPrice: 60.00,
       originalPrincipal: 6000.00,
+      baseCash: 0,
       shares: 100,
       avgPrice: 60.00,
       currentPrice: 45.97,
@@ -56,6 +57,7 @@ const DEFAULT_STATE = {
       baseShares: 100,
       baseAvgPrice: 80.00,
       originalPrincipal: 8000.00,
+      baseCash: 0,
       shares: 100,
       avgPrice: 80.00,
       currentPrice: 65.00,
@@ -133,19 +135,28 @@ function sanitizeRecords(list, allowedTypes) {
     });
 }
 
-// 예전 버전 저장 데이터에는 원금 기준점(baseShares·baseAvgPrice·originalPrincipal)이 없을 수 있다.
-// 그 빈칸이 샘플 기본값으로 채워지지 않도록 저장된 수량·평단에서 다시 맞춘다.
-function repairPrincipalAnchor(t) {
-  if (t.logs.length === 0) {
-    // 기록이 없으면 기준점은 항상 현재 보유 수량·평단과 같다 (onManualAccountInput과 동일한 규칙)
+// 저장 데이터를 "원금 기준점 + 매매 기록" 한 가지 기준으로 맞춘다.
+// t: 기본값과 합친 종목 데이터, src: 저장돼 있던 원본 종목 데이터
+function repairPrincipalAnchor(t, src) {
+  const hasAnchor = Number(src.baseShares) > 0 && Number(src.baseAvgPrice) > 0 && Number(src.originalPrincipal) > 0;
+  // 2026-11-08 배포본 하나가 빈 기준점을 샘플 기본값(100주·$60·$6,000)으로 채워 저장한 경우
+  const isSampleLeak = Number(src.baseShares) === 100 && Number(src.baseAvgPrice) === 60 &&
+    Number(src.originalPrincipal) === 6000 && !(t.shares === 100 && t.avgPrice === 60);
+
+  if (t.logs.length === 0 && (!hasAnchor || isSampleLeak)) {
+    // 기준점이 없던 예전 버전에서는 입력칸 값(보유 수량·평단)이 곧 기준점이었다
     t.baseShares = t.shares;
     t.baseAvgPrice = t.avgPrice;
-    t.addedPrincipal = 0;
   }
   const expected = Number((t.baseShares * t.baseAvgPrice).toFixed(2));
   if (Math.abs((t.originalPrincipal || 0) - expected) > 0.01) {
     t.originalPrincipal = expected;
-    if (t.logs.length > 0) recalculateRescueBalanceFromLogs(t);
+  }
+
+  // 시작 현금 필드가 생기기 전에는 기록 없이 [보유 구출 현금] 칸에 직접 넣은 금액이 있을 수 있다.
+  // 지금 보이는 탈출가가 바뀌지 않도록 그 금액을 작전 시작 현금으로 옮긴다.
+  if (!('baseCash' in src)) {
+    t.baseCash = t.logs.length === 0 ? Math.max(0, Number(t.reservedCash) || 0) : 0;
   }
 }
 
@@ -161,13 +172,15 @@ function mergeWithDefaults(parsed) {
     const { history: _h, ...dGrowthScalars } = dGrowth;
     merged.tickers[sym] = {
       ...pickTyped(dScalars, src),
-      logs: sanitizeRecords(src.logs, ['SELL', 'BUY']),
+      logs: sanitizeRecords(src.logs, ['SELL', 'BUY', 'DEPOSIT', 'WITHDRAW']),
       growth: {
         ...pickTyped(dGrowthScalars, src.growth),
         history: sanitizeRecords(src.growth?.history, ['BUY', 'GRADUATE'])
       }
     };
-    if (Object.keys(src).length > 0) repairPrincipalAnchor(merged.tickers[sym]);
+    if (Object.keys(src).length > 0) repairPrincipalAnchor(merged.tickers[sym], src);
+    // 보유 수량·현금·탈출가는 항상 기준점과 기록에서 다시 계산한다
+    recalculateRescueBalanceFromLogs(merged.tickers[sym]);
   });
 
   if (!merged.tickers[merged.currentTicker]) merged.currentTicker = 'SOXL';
@@ -432,26 +445,18 @@ function updateAnchorBanner(t) {
   const bannerEl = document.getElementById('account-anchor-banner');
   if (!bannerEl) return;
 
+  const baseText = `${t.baseShares}주 × ${formatUSD(t.baseAvgPrice)}` +
+    (t.baseCash > 0 ? ` + 시작 현금 ${formatUSD(t.baseCash)}` : '');
+  const added = t.addedPrincipal || 0;
+  const addedText = added !== 0
+    ? ` ${added > 0 ? '+ 추가 투입' : '- 인출'} <strong>${formatUSD(Math.abs(added))}</strong>`
+    : '';
+
   if (t.logs && t.logs.length > 0) {
-    const addedText = t.addedPrincipal > 0 ? ` + 추가 투입 <strong>${formatUSD(t.addedPrincipal)}</strong>` : '';
-    bannerEl.innerHTML = `🔒 최초 원금 <strong>${formatUSD(t.originalPrincipal)}</strong>${addedText} <small>(기록 ${t.logs.length}건 반영: ${t.baseShares}주 ➔ ${t.shares}주)</small>`;
+    bannerEl.innerHTML = `🔒 최초 원금 <strong>${formatUSD(t.originalPrincipal)}</strong>${addedText} <small>(${baseText} · 기록 ${t.logs.length}건 반영: ${t.baseShares}주 ➔ ${t.shares}주)</small>`;
   } else {
-    bannerEl.innerHTML = `🔒 회복 목표 원금: <strong id="anchor-principal-text">${formatUSD(t.originalPrincipal)}</strong> (${t.baseShares}주 × ${formatUSD(t.baseAvgPrice)})`;
+    bannerEl.innerHTML = `🔒 회복 목표 원금: <strong id="anchor-principal-text">${formatUSD(t.originalPrincipal)}</strong> (${baseText})`;
   }
-}
-
-function onManualAccountInput() {
-  const t = appState.tickers[appState.currentTicker];
-  const newShares = parseFloat(document.getElementById('initial-shares').value) || 0;
-  const newAvgPrice = parseFloat(document.getElementById('avg-price').value) || 0;
-
-  if (!t.logs || t.logs.length === 0) {
-    t.baseShares = newShares;
-    t.baseAvgPrice = newAvgPrice;
-    t.originalPrincipal = Number((newShares * newAvgPrice).toFixed(2));
-    t.addedPrincipal = 0;
-  }
-  recalcAll(true);
 }
 
 function resetInitialAnchor() {
@@ -467,25 +472,25 @@ function resetInitialAnchor() {
     String(t.baseAvgPrice)
   );
   if (pInput === null) return;
+  const cInput = prompt(
+    `[${appState.currentTicker}] 구출 작전을 시작할 때 이미 갖고 있던 '구출 현금($)'이 있다면 입력해 주세요 (없으면 0):`,
+    String(t.baseCash || 0)
+  );
+  if (cInput === null) return;
 
   const bs = parseFloat(sInput);
   const bp = parseFloat(pInput);
-  if (!bs || !bp || bs <= 0 || bp <= 0) {
-    alert('올바른 주식 수와 평단가를 입력해 주세요.');
+  const bc = parseFloat(cInput) || 0;
+  if (!bs || !bp || bs <= 0 || bp <= 0 || bc < 0) {
+    alert('올바른 주식 수, 평단가, 현금을 입력해 주세요.');
     return;
   }
 
   t.baseShares = bs;
   t.baseAvgPrice = bp;
+  t.baseCash = Number(bc.toFixed(2));
   t.originalPrincipal = Number((bs * bp).toFixed(2));
-
-  if (t.logs && t.logs.length > 0) {
-    recalculateRescueBalanceFromLogs(t);
-  } else {
-    t.shares = bs;
-    t.avgPrice = bp;
-    t.addedPrincipal = 0;
-  }
+  recalculateRescueBalanceFromLogs(t);
 
   saveState();
   populateInputsFromState();
@@ -568,30 +573,17 @@ function importBackupFile(event) {
   reader.readAsText(file);
 }
 
+// 보유 수량·평단·현금은 원금 기준점과 매매 기록에서만 계산하므로 여기서는 읽지 않는다
 function syncInputsToState() {
   const t = appState.tickers[appState.currentTicker];
   ensurePrincipalAnchor(t);
 
-  const newShares = parseFloat(document.getElementById('initial-shares').value) || 0;
-  const newAvgPrice = parseFloat(document.getElementById('avg-price').value) || 0;
-  const newCash = parseFloat(document.getElementById('reserved-cash').value) || 0;
-
-  if (!t.logs || t.logs.length === 0) {
-    t.baseShares = newShares;
-    t.baseAvgPrice = newAvgPrice;
-    t.originalPrincipal = Number((newShares * newAvgPrice).toFixed(2));
-    t.addedPrincipal = 0;
-  }
-
-  t.shares = newShares;
-  t.avgPrice = newAvgPrice;
   const typedPrice = parseFloat(document.getElementById('current-price').value);
   if (typedPrice > 0 && typedPrice !== t.currentPrice) {
     // 증권사 앱에서 확인한 가격을 직접 입력한 경우도 최신 시세로 인정
     t.currentPrice = typedPrice;
     t.lastQuoteAt = Date.now();
   }
-  t.reservedCash = newCash;
 
   t.sellRatio = parseFloat(document.getElementById('sell-ratio-slider').value) || 20;
   t.simSellPrice = parseFloat(document.getElementById('sim-sell-price').value) || t.currentPrice;
@@ -608,7 +600,7 @@ function recalculateRescueBalanceFromLogs(t) {
 
   const originalPrincipal = t.originalPrincipal;
   let curShares = t.baseShares;
-  let curCash = 0;
+  let curCash = Math.max(0, Number(t.baseCash) || 0);
   let addedPrincipal = 0;
 
   // 오래된 기록부터 순서대로 재생
@@ -619,7 +611,20 @@ function recalculateRescueBalanceFromLogs(t) {
     const s = Number(item.shares) || 0;
     const grossAmt = p * s;
 
-    if (item.type === 'SELL') {
+    if (item.type === 'DEPOSIT') {
+      // 외부에서 넣은 돈: 현금과 회복 목표 원금이 함께 늘어난다
+      item.shares = 1;
+      item.amount = Number(p.toFixed(2));
+      curCash = Number((curCash + item.amount).toFixed(2));
+      addedPrincipal = Number((addedPrincipal + item.amount).toFixed(2));
+    } else if (item.type === 'WITHDRAW') {
+      // 구출 현금을 빼서 다른 곳에 쓴 돈: 돌려받은 셈이므로 회복 목표 원금에서 뺀다
+      item.shares = 1;
+      const out = Math.min(Number(p.toFixed(2)), curCash);
+      item.amount = out;
+      curCash = Number((curCash - out).toFixed(2));
+      addedPrincipal = Number((addedPrincipal - out).toFixed(2));
+    } else if (item.type === 'SELL') {
       const netProceeds = Number((grossAmt * (1 - TRADING_FEE_RATE)).toFixed(2));
       item.amount = netProceeds;
       curShares = Math.max(0, Number((curShares - s).toFixed(4)));
@@ -1821,11 +1826,25 @@ function fillFromSimulator() {
   document.getElementById('log-memo').value = `목표 재매수가: $${buyPrice} 이하`;
 }
 
+// 입금·인출 기록은 주식 수 없이 금액(price 필드)만 쓴다
+function isCashLogType(type) {
+  return type === 'DEPOSIT' || type === 'WITHDRAW';
+}
+
 function toggleLogTypeHint() {
   const type = document.getElementById('log-type').value;
   const memoInput = document.getElementById('log-memo');
+  const cashType = isCashLogType(type);
+  document.getElementById('log-price-label').textContent = cashType ? '금액 ($)' : '체결 가격 ($)';
+  document.getElementById('log-price').placeholder = cashType ? '예: 5000' : '예: 50.10';
+  document.getElementById('log-shares-group').style.display = cashType ? 'none' : '';
+  document.getElementById('log-shares').required = !cashType;
   if (type === 'SELL') {
     memoInput.placeholder = '예: $45.0 이하에서 재매수 대기';
+  } else if (type === 'DEPOSIT') {
+    memoInput.placeholder = '예: 월급에서 추가 투입';
+  } else if (type === 'WITHDRAW') {
+    memoInput.placeholder = '예: 생활비로 일부 인출';
   } else {
     memoInput.placeholder = '예: 확보 현금으로 저점 재매수 완료!';
   }
@@ -1836,7 +1855,7 @@ function addTradeLog(e) {
   const t = appState.tickers[appState.currentTicker];
   const type = document.getElementById('log-type').value;
   const price = parseFloat(document.getElementById('log-price').value);
-  const shares = parseFloat(document.getElementById('log-shares').value);
+  const shares = isCashLogType(type) ? 1 : parseFloat(document.getElementById('log-shares').value);
   const memo = document.getElementById('log-memo').value.trim();
   const tradeDate = document.getElementById('log-date').value || todayISO();
 
@@ -1846,6 +1865,10 @@ function addTradeLog(e) {
 
   if (type === 'SELL' && shares > t.shares) {
     alert('현재 보유 주식 수보다 많이 매도할 수 없습니다.');
+    return;
+  }
+  if (type === 'WITHDRAW' && price > (t.reservedCash || 0)) {
+    alert(`보유 구출 현금(${formatUSD(t.reservedCash || 0)})보다 많이 인출할 수 없습니다.`);
     return;
   }
 
@@ -1889,12 +1912,12 @@ function saveEditLog(id) {
 
   const newType = document.getElementById(`edit-log-type-${id}`)?.value || item.type;
   const newPrice = parseFloat(document.getElementById(`edit-log-price-${id}`)?.value);
-  const newShares = parseFloat(document.getElementById(`edit-log-shares-${id}`)?.value);
+  const newShares = isCashLogType(newType) ? 1 : parseFloat(document.getElementById(`edit-log-shares-${id}`)?.value);
   const newMemo = document.getElementById(`edit-log-memo-${id}`)?.value.trim() || '';
   const newDate = document.getElementById(`edit-log-date-${id}`)?.value;
 
   if (!newPrice || !newShares || newPrice <= 0 || newShares <= 0) {
-    alert('올바른 체결 가격과 수량을 입력해 주세요.');
+    alert('올바른 체결 가격(금액)과 수량을 입력해 주세요.');
     return;
   }
 
@@ -2129,9 +2152,16 @@ function renderLogs() {
   t.logs.forEach(item => {
     const tr = document.createElement('tr');
     const isSell = item.type === 'SELL';
-    const badge = isSell
-      ? `<span style="color: var(--accent-red); font-weight: 700;">🔴 일부 매도</span>`
-      : `<span style="color: var(--accent-green); font-weight: 700;">🟢 저점 재매수</span>`;
+    const isCash = isCashLogType(item.type);
+    const badge = {
+      SELL: `<span style="color: var(--accent-red); font-weight: 700;">🔴 일부 매도</span>`,
+      BUY: `<span style="color: var(--accent-green); font-weight: 700;">🟢 저점 재매수</span>`,
+      DEPOSIT: `<span style="color: var(--accent-blue); font-weight: 700;">💵 외부 자금 입금</span>`,
+      WITHDRAW: `<span style="color: #b45309; font-weight: 700;">🏧 구출 현금 인출</span>`
+    }[item.type];
+    const typeOptions = [
+      ['SELL', '🔴 일부 매도'], ['BUY', '🟢 저점 재매수'], ['DEPOSIT', '💵 외부 자금 입금'], ['WITHDRAW', '🏧 구출 현금 인출']
+    ].map(([v, label]) => `<option value="${v}" ${item.type === v ? 'selected' : ''}>${label}</option>`).join('');
 
     const rebuyGuide = isSell
       ? `-10%: <strong>$${(item.price * 0.9).toFixed(2)}</strong> / -15%: <strong>$${(item.price * 0.85).toFixed(2)}</strong>`
@@ -2141,10 +2171,7 @@ function renderLogs() {
       tr.innerHTML = `
         <td><input type="date" id="edit-log-date-${item.id}" class="inline-edit-input" value="${getTradeDate(item)}" /></td>
         <td>
-          <select id="edit-log-type-${item.id}" class="inline-edit-select">
-            <option value="SELL" ${isSell ? 'selected' : ''}>🔴 일부 매도</option>
-            <option value="BUY" ${!isSell ? 'selected' : ''}>🟢 저점 재매수</option>
-          </select>
+          <select id="edit-log-type-${item.id}" class="inline-edit-select">${typeOptions}</select>
         </td>
         <td><input type="number" id="edit-log-price-${item.id}" class="inline-edit-input" step="0.01" value="${item.price}" /></td>
         <td><input type="number" id="edit-log-shares-${item.id}" class="inline-edit-input" step="0.01" value="${item.shares}" /></td>
@@ -2162,9 +2189,9 @@ function renderLogs() {
       tr.innerHTML = `
         <td>${escapeHTML(displayTradeDate(item))}</td>
         <td>${badge}</td>
-        <td><strong>${formatUSD(item.price)}</strong></td>
-        <td>${item.shares}주</td>
-        <td>${formatUSD(item.amount)}</td>
+        <td><strong>${isCash ? '-' : formatUSD(item.price)}</strong></td>
+        <td>${isCash ? '-' : `${item.shares}주`}</td>
+        <td>${item.type === 'WITHDRAW' ? '-' : ''}${formatUSD(item.amount)}</td>
         <td>${rebuyGuide}</td>
         <td>${escapeHTML(item.memo) || '-'}</td>
         <td>

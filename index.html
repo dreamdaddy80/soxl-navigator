@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SOXL · TQQQ 올인원 투자 네비게이터</title>
-  <link rel="stylesheet" href="styles.css?v=20261108-8" />
+  <link rel="stylesheet" href="styles.css?v=20261108-9" />
   <!-- TradingView Widget Script -->
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 </head>
@@ -276,12 +276,12 @@
             <div class="input-stack fwp-keypad-inputs">
               <div class="input-group">
                 <label for="initial-shares">현재 보유 주식 (주)</label>
-                <input type="number" id="initial-shares" value=" min="1" step="0.01" oninput="onManualAccountInput()" />
+                <input type="number" id="initial-shares" readonly tabindex="-1" class="derived-input" />
               </div>
 
               <div class="input-group">
                 <label for="avg-price">실질 탈출 목표가 ($)</label>
-                <input type="number" id="avg-price" value=" min="0.01" step="0.01" oninput="onManualAccountInput()" />
+                <input type="number" id="avg-price" readonly tabindex="-1" class="derived-input" />
               </div>
 
               <div class="input-group highlight-input">
@@ -291,9 +291,10 @@
 
               <div class="input-group">
                 <label for="reserved-cash">보유 구출 현금 ($)</label>
-                <input type="number" id="reserved-cash" value="0" min="0" step="1" oninput="recalcAll()" />
+                <input type="number" id="reserved-cash" readonly tabindex="-1" class="derived-input" />
               </div>
             </div>
+            <p class="derived-input-hint">보유 주식·탈출가·현금은 <strong>⚙️ 원금기준</strong>과 <strong>매매 기록장</strong>(매수·매도·입금·인출)에서만 계산됩니다.</p>
 
             <!-- PC <-> 모바일 3초 데이터 연동 & 백업 독 -->
             <div class="sync-mini-bar">
@@ -593,7 +594,7 @@
           <div class="input-grid-4">
             <div class="input-group">
               <label for="g-total-budget">총 투자 시드 ($)</label>
-              <input type="number" id="g-total-budget" value=" min="100" step="100" oninput="recalcGrowthMode()" />
+              <input type="number" id="g-total-budget" min="100" step="100" oninput="recalcGrowthMode()" />
             </div>
 
             <div class="input-group">
@@ -625,7 +626,7 @@
 
             <div class="input-group">
               <label>1회분 매수액 <small id="g-one-unit-krw" style="font-weight:600;color:var(--text-muted);"></small></label>
-              <input type="text" id="g-one-unit-usd" value=" readonly style="background:#f8fafc;" />
+              <input type="text" id="g-one-unit-usd" readonly style="background:#f8fafc;" />
             </div>
 
             <div class="input-group">
@@ -635,7 +636,7 @@
 
             <div class="input-group">
               <label>남은 현금 <small id="g-remaining-pct" style="font-weight:600;color:var(--text-muted);"></small></label>
-              <input type="text" id="g-remaining-cash" value=" readonly style="background:#f8fafc;" />
+              <input type="text" id="g-remaining-cash" readonly style="background:#f8fafc;" />
             </div>
           </div>
         </div>
@@ -704,13 +705,15 @@
                 <select id="log-type" onchange="toggleLogTypeHint()">
                   <option value="SELL">🔴 일부 매도 (현금 확보)</option>
                   <option value="BUY">🟢 저점 재매수 (주식 수 늘리기)</option>
+                  <option value="DEPOSIT">💵 외부 자금 입금 (원금 증가)</option>
+                  <option value="WITHDRAW">🏧 구출 현금 인출 (원금 감소)</option>
                 </select>
               </div>
               <div class="input-group">
-                <label for="log-price">체결 가격 ($)</label>
+                <label for="log-price" id="log-price-label">체결 가격 ($)</label>
                 <input type="number" id="log-price" step="0.01" placeholder="예: 50.10" required />
               </div>
-              <div class="input-group">
+              <div class="input-group" id="log-shares-group">
                 <label for="log-shares">수량 (주)</label>
                 <input type="number" id="log-shares" step="0.01" placeholder="예: 145" required />
               </div>
@@ -802,6 +805,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261108-8"></script>
+  <script src="app.js?v=20261108-9"></script>
 </body>
 </html>
