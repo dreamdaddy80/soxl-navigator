@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SOXL · TQQQ 올인원 투자 네비게이터</title>
+  <link rel="stylesheet" href="styles.css?v=20261108-8" />
+  <!-- TradingView Widget Script -->
+  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- =================================================================== -->
+    <!-- 좌측 원형 아이콘 레일 네비게이션 (레퍼런스 이미지 스타일 / 모바일 하단 플로팅 독) -->
+    <!-- =================================================================== -->
+    <aside class="sidebar">
+      <div class="sidebar-brand" title="SOXL · TQQQ 올인원 네비게이터">
+        <div class="logo-mark">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <circle cx="8" cy="8" r="4.5" fill="currentColor"/>
+            <circle cx="16.5" cy="7.5" r="3" fill="currentColor" opacity="0.75"/>
+            <circle cx="7.5" cy="16.5" r="3" fill="currentColor" opacity="0.75"/>
+            <circle cx="15.5" cy="15.5" r="4" fill="currentColor"/>
+          </svg>
+        </div>
+      </div>
+
+      <nav class="side-nav">
+        <button type="button" class="nav-item active" id="nav-overview" onclick="switchView('overview')" title="홈 대시보드">
+          <span class="nav-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5.5v-6h-5v6H4a1 1 0 0 1-1-1v-9.5z"/></svg>
+          </span>
+          <span class="nav-label"><strong>홈</strong></span>
+        </button>
+
+        <button type="button" class="nav-item" id="nav-chart" onclick="switchView('chart')" title="실시간 차트 & 규칙 기반 타점">
+          <span class="nav-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 3 5-6"/></svg>
+          </span>
+          <span class="nav-label"><strong>차트·타점</strong></span>
+        </button>
+
+        <button type="button" class="nav-item" id="nav-rescue" onclick="switchView('rescue')" title="원금 탈출 시뮬레이터">
+          <span class="nav-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+          </span>
+          <span class="nav-label"><strong>탈출시뮬</strong></span>
+        </button>
+
+        <button type="button" class="nav-item" id="nav-growth" onclick="switchView('growth')" title="40분할 꾸준한 수익">
+          <span class="nav-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+          </span>
+          <span class="nav-label"><strong>40분할</strong></span>
+        </button>
+
+        <button type="button" class="nav-item" id="nav-journal" onclick="switchView('journal')" title="매매 기록장 & 내역">
+          <span class="nav-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+          </span>
+          <span class="nav-label"><strong>기록장</strong></span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button type="button" class="avatar-refresh-btn" onclick="fetchMarketDataAndAnalyze()" title="최신 시세 & 타점 새로고침">
+          <span class="live-dot"></span>
+          <span>🔄</span>
+        </button>
+        <div class="live-status" id="live-connection-badge" style="display:none;">🟢 실시간 연동</div>
+      </div>
+    </aside>
+
+    <!-- =================================================================== -->
+    <!-- 우측 메인 워크스페이스 영역 -->
+    <!-- =================================================================== -->
+    <div class="main-workspace">
+      <!-- 상단 미니멀 헤더 (레퍼런스의 "Hi, Leandro!" + 우측 블랙 캡슐 & 아이콘 바) -->
+      <header class="workspace-topbar">
+        <div class="topbar-left">
+          <div class="greeting-block">
+            <span class="greeting-avatar">🚀</span>
+            <div>
+              <h2 class="greeting-title">Hi, Investor!</h2>
+              <span class="greeting-sub" id="analysis-time-badge">SOXL · TQQQ 네비게이터</span>
+            </div>
+          </div>
+          <div class="ticker-selector">
+            <button id="btn-soxl" class="ticker-btn active" onclick="switchTicker('SOXL')">SOXL</button>
+            <button id="btn-tqqq" class="ticker-btn" onclick="switchTicker('TQQQ')">TQQQ</button>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <div class="topbar-quote">
+            <span class="tq-label" id="quote-ticker-label">SOXL</span>
+            <strong class="tq-price" id="live-price-display">$45.97</strong>
+            <span class="quote-change" id="live-change-display">+0.00 (0.00%)</span>
+          </div>
+          <button type="button" class="icon-circle-btn" onclick="switchView('chart')" title="실시간 차트 보기">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 3 5-6"/></svg>
+          </button>
+          <button type="button" class="icon-circle-btn" onclick="fetchMarketDataAndAnalyze()" title="실시간 시세 갱신">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- ================================================================= -->
+      <!-- VIEW 1: 🏠 홈 대시보드 (레퍼런스 이미지 레이아웃 완벽 반영) -->
+      <!-- ================================================================= -->
+      <section id="view-overview" class="view-page active">
+        <div class="fintech-home-grid">
+          <!-- 좌측/중앙 메인 캔버스: 레몬 옐로우 히어로 카드 + 미니 통화형 카드 3종 + 플로팅 리스트 -->
+          <div class="fintech-main-col">
+            <div class="fintech-top-split">
+              <!-- (1) 레퍼런스 시그니처: 레몬 옐로우 밸런스 카드 + 하단 3버튼 액션 독 -->
+              <div class="left-stack">
+                <div class="hero-yellow-shell">
+                  <div class="hero-yellow-card">
+                    <div class="hy-top-row">
+                      <span class="hy-currency-tag">USD · 내 현재 평가자산</span>
+                      <span class="hy-eye-icon" onclick="switchView('rescue')" title="원금 탈출 시뮬레이터">↗</span>
+                    </div>
+                    <div class="hy-sub-rate">
+                      회복 원금 <strong id="total-principal">-</strong> (<span id="total-principal-krw">-</span>)
+                    </div>
+                    <div class="hy-big-balance" id="current-eval">-</div>
+                    <div class="hy-change-text" id="current-loss-rate">-</div>
+                  </div>
+
+                  <!-- 레퍼런스 Pay / Transfer / Receive 3분할 액션 바 -->
+                  <div class="hy-action-dock">
+                    <button type="button" class="hy-dock-btn" onclick="switchView('rescue')">
+                      <span class="hy-dock-icon">🛠️</span>
+                      <span>탈출 시뮬</span>
+                    </button>
+                    <button type="button" class="hy-dock-btn" onclick="switchView('chart')">
+                      <span class="hy-dock-icon">📈</span>
+                      <span>차트·타점</span>
+                    </button>
+                    <button type="button" class="hy-dock-btn" onclick="switchView('journal')">
+                      <span class="hy-dock-icon">📓</span>
+                      <span>매매 기록</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- (2) 레퍼런스 Euro / Pound / Franc 스타일 세로형 미니 KPI 카드 3종 -->
+                <div class="mini-currency-grid">
+                  <div class="mini-curr-card">
+                    <div class="mc-icon mint">🎯</div>
+                    <div class="mc-body">
+                      <span class="mc-label">본전 탈출 주가</span>
+                      <strong class="mc-val" id="breakeven-price">-</strong>
+                      <small class="mc-sub" id="needed-rise-rate">-</small>
+                    </div>
+                  </div>
+
+                  <div class="mini-curr-card">
+                    <div class="mc-icon sky">🔴</div>
+                    <div class="mc-body">
+                      <span class="mc-label">1차 추천 매도가</span>
+                      <strong class="mc-val" id="top-sell-target">$50.10</strong>
+                      <small class="mc-sub">반등시 15~20% 매도</small>
+                    </div>
+                  </div>
+
+                  <div class="mini-curr-card dark-cta-card" onclick="switchView('growth')">
+                    <div class="mc-icon dark">＋</div>
+                    <div class="mc-body">
+                      <span class="mc-label">40분할 복리</span>
+                      <strong class="mc-val">수익 모드</strong>
+                      <small class="mc-sub">무한매수법 ➔</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- (3) 레퍼런스 Recent Transactions 스타일: 플로팅 화이트 필(Pill) 리스트 & 신호등 -->
+              <div class="right-transactions-col">
+                <div class="section-row-head">
+                  <h3>Today's Signal & Missions</h3>
+                  <button type="button" class="text-link-btn" onclick="switchView('chart')">View Chart ➔</button>
+                </div>
+
+                <!-- 호흡 선택 캡슐 -->
+                <div class="strategy-mode-bar compact-pill-bar">
+                  <div class="mode-btns">
+                    <button type="button" class="mode-btn mode-short-btn" onclick="setTargetMode('SHORT')">⚡ 짧은 회전 (+4.5%)</button>
+                    <button type="button" class="mode-btn mode-mid-btn active" onclick="setTargetMode('MID')">⚖️ 표준 반등 (+9%)</button>
+                    <button type="button" class="mode-btn mode-high-btn" onclick="setTargetMode('HIGH')">🚀 강한 반등 (+15%)</button>
+                  </div>
+                </div>
+
+                <!-- 플로팅 화이트 카드 1: 현재 타이밍 신호등 -->
+                <div id="signal-result-box" class="signal-box neutral">
+                  <div class="traffic-lights">
+                    <div class="light red" id="light-sell">🔴 반등 매도</div>
+                    <div class="light yellow active" id="light-wait">🟡 관망·대기</div>
+                    <div class="light green" id="light-buy">🟢 저점 매수</div>
+                  </div>
+
+                  <div class="meter-wrap">
+                    <div class="meter-labels">
+                      <span>🟢 과매도</span>
+                      <span id="score-label-text">타이밍 점수: 50점</span>
+                      <span>🔴 과열</span>
+                    </div>
+                    <div class="meter-bar-bg">
+                      <div class="meter-fill" id="timing-meter-fill" style="left: 50%;"></div>
+                    </div>
+                  </div>
+
+                  <div class="signal-content">
+                    <h3 id="signal-title">시세 데이터를 불러와 타점을 계산 중입니다...</h3>
+                    <p id="signal-desc">잠시만 기다려 주시거나 우측 상단의 새로고침 아이콘을 눌러주세요.</p>
+                    <div class="action-recipe" id="signal-action-recipe"></div>
+                  </div>
+                </div>
+
+                <!-- 플로팅 화이트 필 아이템: 1차 저점 재매수 타점 요약 -->
+                <div class="floating-pill-item" onclick="switchView('rescue')">
+                  <div class="fp-left">
+                    <div class="fp-avatar green-av">🟢</div>
+                    <div class="fp-text">
+                      <strong>1차 추천 저점 재매수가</strong>
+                      <span>확보 현금으로 주식 수 늘리기</span>
+                    </div>
+                  </div>
+                  <div class="fp-right green-val" id="top-buy-target">$45.09</div>
+                </div>
+
+                <!-- 플로팅 화이트 필 아이템: 무자본 구출 원리 -->
+                <div class="beginner-tip">
+                  <strong>💡 핵심 원리:</strong>
+                  <span id="why-hard-explanation"></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 하단 전체폭: 내 실전 매매 기록 기반 맞춤형 다음 작전 브리핑 -->
+            <div id="overview-next-mission-box" class="mission-briefing-card"></div>
+          </div>
+
+          <!-- (4) 우측 순백색 액션 패널 (레퍼런스 이미지 1의 우측 "$2,101.70 / Send" 패널 스타일) -->
+          <aside class="fintech-white-panel">
+            <div class="fwp-top-pill-row">
+              <div class="fwp-black-pill">
+                <span class="fwp-dots"><span></span><span></span></span>
+                <strong>SOXL · TQQQ Account</strong>
+              </div>
+            </div>
+
+            <div class="fwp-profile-row">
+              <div class="fwp-user">
+                <div class="fwp-user-avatar">💼</div>
+                <div>
+                  <strong>내 보유 계좌 설정</strong>
+                  <span>실시간 자동 저장 · 전 메뉴 연동</span>
+                </div>
+              </div>
+              <button type="button" class="fwp-change-btn" onclick="fetchMarketDataAndAnalyze()">Sync</button>
+            </div>
+
+            <div class="fwp-hero-number-box">
+              <span class="fwp-hero-caption" id="market-session-badge">현재 실시간 기준 주가</span>
+              <div class="fwp-hero-price" id="fwp-live-price-mirror">$45.97</div>
+              <span class="fwp-hero-sub" id="price-status-text">실시간 시세가 자동으로 입력됩니다</span>
+            </div>
+
+            <div id="account-anchor-banner" class="anchor-info-pill">
+              🔒 회복 목표 원금: <strong id="anchor-principal-text">-</strong>
+            </div>
+
+            <div class="input-stack fwp-keypad-inputs">
+              <div class="input-group">
+                <label for="initial-shares">현재 보유 주식 (주)</label>
+                <input type="number" id="initial-shares" value=" min="1" step="0.01" oninput="onManualAccountInput()" />
+              </div>
+
+              <div class="input-group">
+                <label for="avg-price">실질 탈출 목표가 ($)</label>
+                <input type="number" id="avg-price" value=" min="0.01" step="0.01" oninput="onManualAccountInput()" />
+              </div>
+
+              <div class="input-group highlight-input">
+                <label for="current-price">현재 주가 ($)</label>
+                <input type="number" id="current-price" value="45.97" min="0.01" step="0.01" oninput="recalcAll()" />
+              </div>
+
+              <div class="input-group">
+                <label for="reserved-cash">보유 구출 현금 ($)</label>
+                <input type="number" id="reserved-cash" value="0" min="0" step="1" oninput="recalcAll()" />
+              </div>
+            </div>
+
+            <!-- PC <-> 모바일 3초 데이터 연동 & 백업 독 -->
+            <div class="sync-mini-bar">
+              <span class="sync-mini-title">📲 PC·모바일 데이터 3초 연동</span>
+              <div class="sync-mini-btns">
+                <button type="button" class="sync-chip-btn" onclick="copyBackupCode()">📋 코드 복사</button>
+                <button type="button" class="sync-chip-btn" onclick="pasteBackupCode()">📥 코드 복원</button>
+                <button type="button" class="sync-chip-btn" onclick="resetInitialAnchor()" title="최초 원금(보유 주식 수 × 매입 평단가) 기준점 재설정">⚙️ 원금기준</button>
+                <button type="button" class="sync-chip-btn" onclick="setQuoteApiKey()" title="Twelve Data API 키 등록·변경 (이 기기에만 저장)">🔑 시세 키</button>
+              </div>
+            </div>
+
+            <button type="button" class="fwp-send-btn" onclick="switchView('rescue')">
+              원금 탈출 시뮬레이터 실행 ➔
+            </button>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- VIEW 2: 📈 실시간 차트 & 규칙 기반 타점 상세 분석 -->
+      <!-- ================================================================= -->
+      <section id="view-chart" class="view-page">
+        <div class="page-title-bar">
+          <div>
+            <h1>📈 실시간 차트 & 규칙 기반 타점 분석</h1>
+            <p>볼린저밴드·RSI 실시간 차트와 목표 매도가·재매수가의 기술적 산출 근거</p>
+          </div>
+          <div class="interval-btns">
+            <button type="button" class="int-btn active" id="int-D" onclick="changeChartInterval('D')">일봉</button>
+            <button type="button" class="int-btn" id="int-60" onclick="changeChartInterval('60')">1시간봉</button>
+            <button type="button" class="int-btn" id="int-15" onclick="changeChartInterval('15')">15분봉</button>
+          </div>
+        </div>
+
+        <div class="chart-analysis-grid">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2 id="chart-title">📈 SOXL 실시간 차트 (BB + RSI)</h2>
+                <p class="chart-helper">
+                  💡 <strong>🔴매도 타점:</strong> 20일 중심선·상단선 반등 또는 RSI 60↑ ｜ <strong>🟢재매수 타점:</strong> 하단선 지지 또는 RSI 38↓
+                </p>
+              </div>
+            </div>
+            <div id="tv_chart_container" class="tv-chart-box"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2>🔍 보조지표 & 산출 근거</h2>
+            </div>
+
+            <div class="live-quote-bar" style="margin-bottom:14px;">
+              <div>
+                <span class="quote-ticker">당일 고가 / 저가</span>
+                <strong id="live-day-range" style="font-size:1.02rem;">- / -</strong>
+              </div>
+              <div style="text-align:right;">
+                <span class="quote-ticker">최근 14일 바닥 / 천장</span>
+                <strong id="live-14d-range" style="font-size:1.02rem;">- / -</strong>
+              </div>
+            </div>
+
+            <div class="strategy-mode-bar compact-pill-bar" style="margin-bottom:14px;">
+              <div class="mode-btns">
+                <button type="button" class="mode-btn mode-short-btn" onclick="setTargetMode('SHORT')">⚡ 짧은 회전</button>
+                <button type="button" class="mode-btn mode-mid-btn active" onclick="setTargetMode('MID')">⚖️ 표준 반등</button>
+                <button type="button" class="mode-btn mode-high-btn" onclick="setTargetMode('HIGH')">🚀 강한 반등</button>
+              </div>
+            </div>
+
+            <div class="rationale-box" id="target-rationale-box"></div>
+
+            <div class="auto-indicators-box">
+              <div class="ind-grid">
+                <div class="ind-item">
+                  <span class="ind-name">RSI (14일 과열도)</span>
+                  <strong class="ind-val" id="ind-rsi-val">-</strong>
+                  <small class="ind-status" id="ind-rsi-status">60↑ 매도 / 38↓ 매수</small>
+                </div>
+                <div class="ind-item">
+                  <span class="ind-name">5일 / 20일 이동평균선</span>
+                  <strong class="ind-val" id="ind-sma20-val">-</strong>
+                  <small class="ind-status" id="ind-sma20-status">단기 저항·지지선</small>
+                </div>
+                <div class="ind-item sell-target-item">
+                  <span class="ind-name">🔴 추천 매도가 (1차 / 2차)</span>
+                  <strong class="ind-val" id="ind-sell-target" style="color: var(--accent-red);">-</strong>
+                  <small class="ind-status" id="ind-sell-basis">선택한 반등 기준 적용</small>
+                </div>
+                <div class="ind-item buy-target-item">
+                  <span class="ind-name">🟢 추천 재매수가 (1차 / 2차)</span>
+                  <strong class="ind-val" id="ind-buy-target" style="color: var(--accent-green);">-</strong>
+                  <small class="ind-status" id="ind-buy-basis">단기 눌림목 지지선</small>
+                </div>
+              </div>
+            </div>
+
+            <div style="margin-top:16px;">
+              <button type="button" class="btn-primary" style="width:100%;" onclick="applyAutoTargetsToSimulator(); switchView('rescue');">
+                🛠️ 이 타점으로 원금 탈출 시뮬레이션 실행 ➔
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- VIEW 3: 🛠️ 원금 탈출 시뮬레이터 (무자본 주식수 늘리기 · 수수료/정수주문 반영) -->
+      <!-- ================================================================= -->
+      <section id="view-rescue" class="view-page">
+        <div class="page-title-bar">
+          <div>
+            <h1>🛠️ 무자본 원금 탈출 시뮬레이터</h1>
+            <p>반등 시 일부 매도 후 눌림목 재매수로 보유 주식 수를 늘려 탈출 목표가를 낮춥니다 (왕복 수수료 0.2% & 정수 주문 반영)</p>
+          </div>
+          <button type="button" class="btn-secondary" onclick="applyAutoTargetsToSimulator()">
+            ✨ 규칙 기반 추천 타점($) 자동 입력
+          </button>
+        </div>
+
+        <div class="card">
+          <!-- 레퍼런스 시그니처 레몬-옐로우 결과 배너를 상단에 배치해 즉각적인 피드백 제공 -->
+          <div class="sim-result-banner">
+            <div class="result-col">
+              <span class="res-label">1회전 성공 시 내 총 보유 주식</span>
+              <div class="res-compare">
+                <span class="before-val" id="res-before-shares">-</span>
+                <span class="arrow">➔</span>
+                <strong class="after-val" id="res-after-shares">-</strong>
+              </div>
+              <span class="res-sub" id="res-shares-diff">-</span>
+            </div>
+
+            <div class="result-col">
+              <span class="res-label">내 실질 본전 탈출 목표가</span>
+              <div class="res-compare">
+                <span class="before-val" id="res-before-target">-</span>
+                <span class="arrow">➔</span>
+                <strong class="after-val highlight-green" id="res-after-target">-</strong>
+              </div>
+              <span class="res-sub" id="res-target-diff">-</span>
+            </div>
+
+            <div class="result-col">
+              <span class="res-label">5회전 반복 성공 시 탈출가</span>
+              <div class="res-compare">
+                <strong class="after-val highlight-gold" id="res-5times-target">-</strong>
+              </div>
+              <span class="res-sub" id="res-5times-shares">-</span>
+            </div>
+          </div>
+
+          <div class="sim-controls-grid">
+            <div class="sim-step-box sell-step">
+              <div class="step-title">STEP 1 · 반등 타점에 일부 팔기 (현금 확보)</div>
+              
+              <div class="slider-group">
+                <div class="slider-header">
+                  <label for="sell-ratio-slider">보유(<span id="sim-current-shares-text">-</span>) 중 매도 비율</label>
+                  <strong class="slider-val" id="sell-ratio-display">20%</strong>
+                </div>
+                <input type="range" id="sell-ratio-slider" min="5" max="50" step="5" value="20" oninput="runSimulator(false)" />
+                <div class="preset-btns">
+                  <button type="button" onclick="setSellRatio(10)">안전 10%</button>
+                  <button type="button" onclick="setSellRatio(20)" class="active-preset">추천 20%</button>
+                  <button type="button" onclick="setSellRatio(30)">적극 30%</button>
+                </div>
+              </div>
+
+              <div class="input-group" style="margin-top: 12px;">
+                <label for="sim-sell-price">
+                  목표 매도 가격 ($)
+                  <span id="sim-sell-reason-badge" class="reason-mini-badge">산출 근거</span>
+                </label>
+                <input type="number" id="sim-sell-price" value="50.10" step="0.1" oninput="runSimulator(true)" />
+              </div>
+
+              <div class="step-summary">
+                <div>실제 매도 주문: <strong id="sim-sell-shares">-</strong> (보유 유지: <span id="sim-remain-shares">-</span>)</div>
+                <div>수수료(0.1%) 차감 후 확보 현금: <strong class="cash-highlight" id="sim-cash-secured">-</strong></div>
+              </div>
+            </div>
+
+            <div class="sim-arrow">➔</div>
+
+            <div class="sim-step-box buy-step">
+              <div class="step-title">STEP 2 · 눌림목에서 판 돈으로 다시 사기</div>
+
+              <div class="slider-group">
+                <div class="slider-header">
+                  <label for="drop-ratio-slider">매도가 대비 목표 하락 폭</label>
+                  <strong class="slider-val" id="drop-ratio-display">-10% ($45.09)</strong>
+                </div>
+                <input type="range" id="drop-ratio-slider" min="5" max="30" step="1" value="10" oninput="runSimulator(true)" />
+                <div class="preset-btns">
+                  <button type="button" onclick="setDropRatio(8)">짧게 -8%</button>
+                  <button type="button" onclick="setDropRatio(10)">추천 -10%</button>
+                  <button type="button" onclick="setDropRatio(15)">크게 -15%</button>
+                </div>
+              </div>
+
+              <div class="input-group" style="margin-top: 12px;">
+                <label for="sim-buy-price">재매수 목표 가격 ($)</label>
+                <input type="number" id="sim-buy-price" value="45.09" step="0.1" oninput="runSimulator(false)" />
+              </div>
+
+              <div class="step-summary">
+                <div>현금(<span id="sim-cash-reuse">-</span>) 정수 주문 가능: <strong class="buy-highlight" id="sim-rebuy-shares">-</strong></div>
+                <div>실제 늘어나는 주식 수: <strong class="gain-shares" id="sim-free-shares">-</strong></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="roadmap-container">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+              <h4 style="margin-bottom:0;">🗺️ 회전수별 원금 탈출 단축 로드맵 (수수료·정수 주문 반영)</h4>
+              <button type="button" class="btn-secondary" onclick="fillFromSimulator(); switchView('journal');">
+                📓 이 시뮬레이션 값으로 매매 기록장에 입력 ➔
+              </button>
+            </div>
+            <div class="table-responsive">
+              <table class="roadmap-table">
+                <thead>
+                  <tr>
+                    <th>구출 회차</th>
+                    <th>보유 주식 수 (잔여현금)</th>
+                    <th>늘어난 주식</th>
+                    <th>실질 탈출 목표가</th>
+                    <th>단축된 목표가</th>
+                  </tr>
+                </thead>
+                <tbody id="roadmap-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- VIEW 4: 🌱 40분할 꾸준한 수익 모드 (본전 탈출 후 평생 투자) -->
+      <!-- ================================================================= -->
+      <section id="view-growth" class="view-page">
+        <div class="page-title-bar">
+          <div>
+            <h1>🌱 40분할 꾸준한 수익 모드 (무한매수법 · 복리)</h1>
+            <p>시드를 40조각으로 나누어 매일 1조각씩 분할 매수하고, 목표 수익률(+10%) 도달 시 전량 익절(졸업)합니다.</p>
+          </div>
+          <span class="badge-highlight" id="growth-cycle-badge">현재 1번째 사이클 진행 중</span>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>1️⃣ 오늘 밤 증권사 앱 「자동 주문표」</h2>
+            <button type="button" class="btn-primary" onclick="graduateCurrentCycle()">
+              🎉 목표 달성! 이번 사이클 익절(졸업) 확정
+            </button>
+          </div>
+
+          <div class="progress-card" style="margin-bottom:16px;">
+            <div class="progress-header">
+              <span id="g-progress-label">📊 시드 소진율: <strong>0.0% (0.0 / 40회차)</strong></span>
+              <span id="g-current-roi-badge" class="reason-mini-badge">현재 수익률: 0.00%</span>
+            </div>
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" id="g-progress-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <div class="recipe-cards-grid" style="margin-top:0;">
+            <div class="order-box buy-order-box">
+              <div class="order-box-header">
+                <span class="order-tag buy-tag">🟢 오늘 밤 LOC 매수 주문</span>
+                <strong id="g-buy-total-budget">오늘 배정액: -</strong>
+              </div>
+              <div id="g-buy-orders-content" class="order-details"></div>
+              <div class="order-tip" id="g-buy-ai-tip"></div>
+            </div>
+
+            <div class="order-box sell-order-box">
+              <div class="order-box-header">
+                <span class="order-tag sell-tag">🔴 오늘 밤 지정가 익절 주문</span>
+                <strong id="g-sell-target-price-label">목표가: $50.57 (+10%)</strong>
+              </div>
+              <div id="g-sell-orders-content" class="order-details"></div>
+              <div class="order-tip" id="g-sell-ai-tip"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>2️⃣ 40분할 시드 & 회차 설정</h2>
+          </div>
+
+          <div class="input-grid-4">
+            <div class="input-group">
+              <label for="g-total-budget">총 투자 시드 ($)</label>
+              <input type="number" id="g-total-budget" value=" min="100" step="100" oninput="recalcGrowthMode()" />
+            </div>
+
+            <div class="input-group">
+              <label for="g-splits">분할 횟수</label>
+              <select id="g-splits" onchange="recalcGrowthMode()">
+                <option value="20">20분할 (공격형)</option>
+                <option value="30">30분할 (균형형)</option>
+                <option value="40" selected>40분할 (표준 추천)</option>
+                <option value="50">50분할 (안전형)</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label for="g-target-profit">목표 익절률 (%)</label>
+              <input type="number" id="g-target-profit" value="10" min="3" max="50" step="0.5" oninput="recalcGrowthMode()" />
+            </div>
+
+            <div class="input-group highlight-input">
+              <label for="g-held-shares">현재 모은 주식 (주)</label>
+              <input type="number" id="g-held-shares" value="0" min="0" step="0.01" oninput="recalcGrowthMode()" />
+            </div>
+          </div>
+
+          <div class="input-grid-4" style="margin-bottom:0;">
+            <div class="input-group highlight-input">
+              <label for="g-avg-price">사이클 평단가 ($)</label>
+              <input type="number" id="g-avg-price" value="45.97" min="0" step="0.01" oninput="recalcGrowthMode()" />
+            </div>
+
+            <div class="input-group">
+              <label>1회분 매수액 <small id="g-one-unit-krw" style="font-weight:600;color:var(--text-muted);"></small></label>
+              <input type="text" id="g-one-unit-usd" value=" readonly style="background:#f8fafc;" />
+            </div>
+
+            <div class="input-group">
+              <label>진행 회차 <small id="g-phase-text" style="font-weight:600;color:var(--text-muted);"></small></label>
+              <input type="text" id="g-current-turn" value="0.0 / 40회차" readonly style="background:#f8fafc;" />
+            </div>
+
+            <div class="input-group">
+              <label>남은 현금 <small id="g-remaining-pct" style="font-weight:600;color:var(--text-muted);"></small></label>
+              <input type="text" id="g-remaining-cash" value=" readonly style="background:#f8fafc;" />
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>3️⃣ 연간 복리 수익 시뮬레이터</h2>
+            <span class="badge-highlight" id="g-cumulative-profit-badge">누적 확정 수익: $0.00</span>
+          </div>
+          <div class="diagnosis-box" id="g-compound-summary"></div>
+          <div class="roadmap-container">
+            <div class="table-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th>졸업 횟수 (약 1.5개월/회)</th>
+                    <th>예상 기간</th>
+                    <th>사이클 종료 후 총 자산 ($)</th>
+                    <th>원금 대비 누적 순수익 ($)</th>
+                    <th>원화 환산 총 자산</th>
+                  </tr>
+                </thead>
+                <tbody id="g-compound-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- VIEW 5: 📓 매매 기록장 & 내역 (구출 노트 + 40분할 익절 기록 + 백업 허브) -->
+      <!-- ================================================================= -->
+      <section id="view-journal" class="view-page">
+        <div class="page-title-bar">
+          <div>
+            <h1>📓 내 매매 기록장 & PC·모바일 데이터 동기화</h1>
+            <p>실전 체결 내역을 입력·수정하면 잔고와 다음 구출 작전이 즉시 재계산됩니다.</p>
+          </div>
+          <div class="quick-nav-pills">
+            <button type="button" class="btn-secondary" onclick="copyBackupCode()">📋 백업코드 복사 (모바일로 보내기)</button>
+            <button type="button" class="btn-secondary" onclick="pasteBackupCode()" style="background:#ffffff;color:#121316;border:1px solid var(--border-subtle);">📥 백업코드 붙여넣기 복원</button>
+            <button type="button" class="btn-secondary" onclick="exportBackupFile()" style="background:#ffffff;color:#121316;border:1px solid var(--border-subtle);">💾 파일 백업</button>
+            <button type="button" class="btn-secondary" onclick="document.getElementById('backup-file-input').click()" style="background:#ffffff;color:#121316;border:1px solid var(--border-subtle);">📂 파일 불러오기</button>
+            <input type="file" id="backup-file-input" accept=".json" style="display:none;" onchange="importBackupFile(event)" />
+          </div>
+        </div>
+
+        <!-- 1. 원금 탈출 구출 기록장 -->
+        <div class="card" style="margin-bottom:24px;">
+          <div class="card-header">
+            <h2>🛠️ [원금 탈출 모드] 실전 구출 작전 기록장</h2>
+            <button type="button" class="btn-secondary" onclick="fillFromSimulator()">⬆️ 탈출 시뮬레이터 값 그대로 가져오기</button>
+          </div>
+          <p class="section-desc">
+            반등 시 일부 매도했거나 저점에 재매수했을 때 기록해 두면, 보유 수량과 재매수 기준선을 자동으로 관리해 줍니다.
+          </p>
+
+          <form class="log-form" onsubmit="addTradeLog(event)">
+            <div class="form-row cols-6">
+              <div class="input-group">
+                <label for="log-date">체결일</label>
+                <input type="date" id="log-date" required />
+              </div>
+              <div class="input-group">
+                <label for="log-type">거래 종류</label>
+                <select id="log-type" onchange="toggleLogTypeHint()">
+                  <option value="SELL">🔴 일부 매도 (현금 확보)</option>
+                  <option value="BUY">🟢 저점 재매수 (주식 수 늘리기)</option>
+                </select>
+              </div>
+              <div class="input-group">
+                <label for="log-price">체결 가격 ($)</label>
+                <input type="number" id="log-price" step="0.01" placeholder="예: 50.10" required />
+              </div>
+              <div class="input-group">
+                <label for="log-shares">수량 (주)</label>
+                <input type="number" id="log-shares" step="0.01" placeholder="예: 145" required />
+              </div>
+              <div class="input-group">
+                <label for="log-memo">메모 / 목표 재매수가</label>
+                <input type="text" id="log-memo" placeholder="예: $45.0 이하에서 재매수 대기" />
+              </div>
+              <div class="input-group btn-align">
+                <button type="submit" class="btn-primary">기록 추가 & 잔고 반영</button>
+              </div>
+            </div>
+          </form>
+
+          <div id="active-sell-alert" class="mission-briefing-card" style="margin-bottom: 18px;"></div>
+
+          <div class="table-responsive">
+            <table class="log-table">
+              <thead>
+                <tr>
+                  <th>일시</th>
+                  <th>구분</th>
+                  <th>체결 가격</th>
+                  <th>수량</th>
+                  <th>거래 금액</th>
+                  <th>권장 재매수 기준선 (-10% / -15%)</th>
+                  <th>메모</th>
+                  <th>관리</th>
+                </tr>
+              </thead>
+              <tbody id="log-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 2. 40분할 수익 모드 매수·익절 기록장 -->
+        <div class="card">
+          <div class="card-header">
+            <h2>🌱 [40분할 수익 모드] 일일 매수 & 사이클 익절 기록장</h2>
+            <button type="button" class="btn-secondary" onclick="fillGrowthBuyFromToday()">⬆️ 오늘 1회분 매수량 자동 채우기</button>
+          </div>
+
+          <form class="log-form" onsubmit="addGrowthDailyBuy(event)">
+            <div class="form-row">
+              <div class="input-group">
+                <label for="g-input-buy-date">체결일</label>
+                <input type="date" id="g-input-buy-date" required />
+              </div>
+              <div class="input-group">
+                <label for="g-input-buy-price">오늘 매수 체결가 ($)</label>
+                <input type="number" id="g-input-buy-price" step="0.01" placeholder="예: 45.97" required />
+              </div>
+              <div class="input-group">
+                <label for="g-input-buy-shares">오늘 매수 수량 (주)</label>
+                <input type="number" id="g-input-buy-shares" step="0.01" placeholder="예: 40" required />
+              </div>
+              <div class="input-group">
+                <label for="g-input-buy-memo">메모</label>
+                <input type="text" id="g-input-buy-memo" placeholder="예: 1회차 정기 분할매수 완료" />
+              </div>
+              <div class="input-group btn-align">
+                <button type="submit" class="btn-primary">체결 반영 & 평단가 자동계산</button>
+              </div>
+            </div>
+          </form>
+
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>일시</th>
+                  <th>구분</th>
+                  <th>체결/졸업 단가</th>
+                  <th>수량</th>
+                  <th>금액 / 확정 수익금</th>
+                  <th>메모</th>
+                  <th>관리</th>
+                </tr>
+              </thead>
+              <tbody id="g-history-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <footer class="app-disclaimer">
+        이 도구의 신호·타점·수익 시뮬레이션은 RSI·이동평균·볼린저밴드 등 고정 규칙으로 계산한 참고용 값이며, 과거 데이터로 검증된 투자 권유가 아닙니다.
+        시세는 무료 공개 데이터를 사용하므로 지연·오류가 있을 수 있으니 주문 전 반드시 증권사 앱의 가격을 확인하세요. 모든 투자 판단과 손실 책임은 본인에게 있습니다.
+      </footer>
+    </div>
+  </div>
+
+  <script src="app.js?v=20261108-8"></script>
+</body>
+</html>
