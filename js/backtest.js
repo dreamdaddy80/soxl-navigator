@@ -557,7 +557,3 @@ function btSplitStudy(bars, opts) {
 
   return { from: bars[0].d, to: bars[last].d, rows, overall: rows[0] || null };
 }
-
-if (typeof module !== 'undefined') {
-  module.exports = { btMedian, btRsiSeries, btBollingerLowerSeries, btRotationRun, btRotationStudy, btRotationOdds, btAlternativesStudy, btSplitSim, btSplitStudy };
-}

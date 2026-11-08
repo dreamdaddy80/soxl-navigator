@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SOXL · TQQQ 올인원 투자 네비게이터</title>
-  <link rel="stylesheet" href="styles.css?v=20261108-12" />
+  <link rel="stylesheet" href="styles.css?v=20261108-13" />
   <!-- TradingView Widget Script -->
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 </head>
@@ -657,14 +657,14 @@
 
             <div class="input-group highlight-input">
               <label for="g-held-shares">현재 모은 주식 (주)</label>
-              <input type="number" id="g-held-shares" value="0" min="0" step="0.01" oninput="recalcGrowthMode()" />
+              <input type="number" id="g-held-shares" class="derived-input" value="0" readonly />
             </div>
           </div>
 
           <div class="input-grid-4" style="margin-bottom:0;">
             <div class="input-group highlight-input">
               <label for="g-avg-price">사이클 평단가 ($)</label>
-              <input type="number" id="g-avg-price" value="45.97" min="0" step="0.01" oninput="recalcGrowthMode()" />
+              <input type="number" id="g-avg-price" class="derived-input" value="45.97" readonly />
             </div>
 
             <div class="input-group">
@@ -682,6 +682,10 @@
               <input type="text" id="g-remaining-cash" readonly style="background:#f8fafc;" />
             </div>
           </div>
+          <p class="derived-input-hint">
+            보유 수량과 평단가는 기록장의 매수·졸업 기록으로 계산됩니다. 증권사 앱과 다르면
+            <button type="button" class="btn-secondary" onclick="setGrowthPosition()">🧾 보유분 맞추기</button>
+          </p>
         </div>
 
         <div class="card">
@@ -857,7 +861,18 @@
     </div>
   </div>
 
-  <script src="backtest.js?v=20261108-12"></script>
-  <script src="app.js?v=20261108-12"></script>
+  <script src="js/format.js?v=20261108-13"></script>
+  <script src="js/ledger.js?v=20261108-13"></script>
+  <script src="js/state.js?v=20261108-13"></script>
+  <script src="js/indicators.js?v=20261108-13"></script>
+  <script src="js/quotes.js?v=20261108-13"></script>
+  <script src="js/backtest.js?v=20261108-13"></script>
+  <script src="js/ui-core.js?v=20261108-13"></script>
+  <script src="js/ui-backup.js?v=20261108-13"></script>
+  <script src="js/ui-growth.js?v=20261108-13"></script>
+  <script src="js/ui-backtest.js?v=20261108-13"></script>
+  <script src="js/ui-rescue.js?v=20261108-13"></script>
+  <script src="js/ui-journal.js?v=20261108-13"></script>
+  <script src="js/main.js?v=20261108-13"></script>
 </body>
 </html>
