@@ -3254,3 +3254,18 @@ tbody tr:hover td {
   font-size: 0.8rem;
   color: var(--text-muted);
 }
+
+/* 화면별 적용 규칙 안내 */
+.rule-notice {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 0.86rem;
+  line-height: 1.55;
+}

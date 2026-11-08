@@ -409,7 +409,7 @@ function updateAutoSignalDashboard(breakevenPrice) {
   const rationaleBox = document.getElementById('target-rationale-box');
   if (rationaleBox) {
     rationaleBox.innerHTML = `
-      <strong>🧐 왜 추천 목표 매도가가 [${formatUSD(t.autoSellTarget1)}]으로 계산되었나요? (산출 근거)</strong><br/>
+      <strong>🧐 왜 회전 규칙 목표 매도가가 [${formatUSD(t.autoSellTarget1)}]으로 계산되었나요? (산출 근거)</strong><br/>
       • <strong>현재 주가(${formatUSD(cur)})</strong> 기준으로, 차트상 단기 반등이 나올 때 매물대 벽에 부딪혀 다시 꺾이기 쉬운 <strong>[${t.sellReasonText}]</strong> 지점이기 때문입니다.<br/>
       • <strong>기준별 비교:</strong> ⚡짧은 회전(5일선·+4.5%): <strong>${formatUSD(t.sma5 && t.sma5 > cur * 1.02 ? t.sma5 : cur * 1.045)}</strong> ｜ ⚖️표준 반등(20일선·+9%): <strong>${formatUSD(t.sma20 && t.sma20 > cur * 1.05 ? t.sma20 : cur * 1.09)}</strong> ｜ 🚀강한 반등(2주고점·+15%): <strong>${formatUSD(t.recentHigh && t.recentHigh > cur * 1.1 ? t.recentHigh : cur * 1.15)}</strong>
     `;

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SOXL · TQQQ 올인원 투자 네비게이터</title>
-  <link rel="stylesheet" href="styles.css?v=20261108-16" />
+  <link rel="stylesheet" href="styles.css?v=20261108-17" />
   <!-- TradingView Widget Script -->
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 </head>
@@ -249,6 +249,8 @@
         </div>
         </div>
 
+        <div id="chart-rule-notice" class="rule-notice" style="display:none;"></div>
+
         <div class="chart-analysis-grid">
           <div class="card">
             <div class="card-header">
@@ -301,12 +303,12 @@
                   <small class="ind-status" id="ind-sma20-status">단기 저항·지지선</small>
                 </div>
                 <div class="ind-item sell-target-item">
-                  <span class="ind-name">🔴 추천 매도가 (1차 / 2차)</span>
+                  <span class="ind-name">🔴 회전 규칙 매도가 (1차 / 2차)</span>
                   <strong class="ind-val" id="ind-sell-target" style="color: var(--accent-red);">-</strong>
                   <small class="ind-status" id="ind-sell-basis">선택한 반등 기준 적용</small>
                 </div>
                 <div class="ind-item buy-target-item">
-                  <span class="ind-name">🟢 추천 재매수가 (1차 / 2차)</span>
+                  <span class="ind-name">🟢 회전 규칙 재매수가 (1차 / 2차)</span>
                   <strong class="ind-val" id="ind-buy-target" style="color: var(--accent-green);">-</strong>
                   <small class="ind-status" id="ind-buy-basis">단기 눌림목 지지선</small>
                 </div>
@@ -356,9 +358,11 @@
             <p>반등 시 일부 매도 후 눌림목 재매수로 보유 주식 수를 늘려 탈출 목표가를 낮추는 계산입니다 (왕복 수수료 0.2% & 정수 주문 반영). 두 주문이 모두 체결된다고 가정하므로, 실제로 통했는지는 아래 🧪 과거 검증에서 확인하세요.</p>
           </div>
           <button type="button" class="btn-secondary" onclick="applyAutoTargetsToSimulator()">
-            ✨ 규칙 기반 추천 타점($) 자동 입력
+            ✨ 회전 규칙 예시 타점($) 입력
           </button>
         </div>
+
+        <div id="rescue-rule-notice" class="rule-notice" style="display:none;"></div>
 
         <div class="card">
           <!-- 레퍼런스 시그니처 레몬-옐로우 결과 배너를 상단에 배치해 즉각적인 피드백 제공 -->
@@ -404,7 +408,7 @@
                 <input type="range" id="sell-ratio-slider" min="5" max="50" step="5" value="20" oninput="runSimulator(false)" />
                 <div class="preset-btns">
                   <button type="button" onclick="setSellRatio(10)">안전 10%</button>
-                  <button type="button" onclick="setSellRatio(20)" class="active-preset">추천 20%</button>
+                  <button type="button" onclick="setSellRatio(20)" class="active-preset">예시 20%</button>
                   <button type="button" onclick="setSellRatio(30)">적극 30%</button>
                 </div>
               </div>
@@ -436,7 +440,7 @@
                 <input type="range" id="drop-ratio-slider" min="5" max="30" step="1" value="10" oninput="runSimulator(true)" />
                 <div class="preset-btns">
                   <button type="button" onclick="setDropRatio(8)">짧게 -8%</button>
-                  <button type="button" onclick="setDropRatio(10)">추천 -10%</button>
+                  <button type="button" onclick="setDropRatio(10)">예시 -10%</button>
                   <button type="button" onclick="setDropRatio(15)">크게 -15%</button>
                 </div>
               </div>
@@ -810,24 +814,24 @@
     </div>
   </div>
 
-  <script src="js/format.js?v=20261108-16"></script>
-  <script src="js/ledger.js?v=20261108-16"></script>
-  <script src="js/state.js?v=20261108-16"></script>
-  <script src="js/indicators.js?v=20261108-16"></script>
-  <script src="js/quotes.js?v=20261108-16"></script>
-  <script src="js/backtest.js?v=20261108-16"></script>
-  <script src="js/alerts.js?v=20261108-16"></script>
-  <script src="js/analytics.js?v=20261108-16"></script>
-  <script src="js/daily-plan.js?v=20261108-16"></script>
-  <script src="js/ui-core.js?v=20261108-16"></script>
-  <script src="js/ui-backup.js?v=20261108-16"></script>
-  <script src="js/ui-growth.js?v=20261108-16"></script>
-  <script src="js/ui-backtest.js?v=20261108-16"></script>
-  <script src="js/ui-rescue.js?v=20261108-16"></script>
-  <script src="js/ui-journal.js?v=20261108-16"></script>
-  <script src="js/ui-analytics.js?v=20261108-16"></script>
-  <script src="js/ui-today.js?v=20261108-16"></script>
-  <script src="js/main.js?v=20261108-16"></script>
+  <script src="js/format.js?v=20261108-17"></script>
+  <script src="js/ledger.js?v=20261108-17"></script>
+  <script src="js/state.js?v=20261108-17"></script>
+  <script src="js/indicators.js?v=20261108-17"></script>
+  <script src="js/quotes.js?v=20261108-17"></script>
+  <script src="js/backtest.js?v=20261108-17"></script>
+  <script src="js/alerts.js?v=20261108-17"></script>
+  <script src="js/analytics.js?v=20261108-17"></script>
+  <script src="js/daily-plan.js?v=20261108-17"></script>
+  <script src="js/ui-core.js?v=20261108-17"></script>
+  <script src="js/ui-backup.js?v=20261108-17"></script>
+  <script src="js/ui-growth.js?v=20261108-17"></script>
+  <script src="js/ui-backtest.js?v=20261108-17"></script>
+  <script src="js/ui-rescue.js?v=20261108-17"></script>
+  <script src="js/ui-journal.js?v=20261108-17"></script>
+  <script src="js/ui-analytics.js?v=20261108-17"></script>
+  <script src="js/ui-today.js?v=20261108-17"></script>
+  <script src="js/main.js?v=20261108-17"></script>
   <div id="alert-toast-area" class="alert-toast-area" aria-live="polite"></div>
 </body>
 </html>

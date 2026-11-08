@@ -295,8 +295,23 @@ function renderTodayGrowthRow(t) {
   `;
 }
 
+// 오늘의 주문이 VR일 때, 회전 규칙으로 계산하는 화면에 다른 규칙임을 알린다
+function renderRuleNotices(t) {
+  const notices = {
+    'rescue-rule-notice': '이 화면은 <strong>반등 회전 규칙</strong>을 비교해 보는 계산기입니다. 실제 오늘의 주문은 <strong>VR 규칙</strong>을 따르므로 매도 수량과 가격이 다릅니다.',
+    'chart-rule-notice': '아래 목표 매도가·재매수가는 <strong>반등 회전 규칙</strong> 기준입니다. 실제 오늘의 주문은 <strong>VR 규칙</strong>을 따르므로 가격이 다릅니다.'
+  };
+  Object.entries(notices).forEach(([id, text]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.display = isVrRule(t) ? '' : 'none';
+    el.innerHTML = `<span>${text}</span><button type="button" class="text-link-btn" onclick="switchView('overview')">오늘의 주문 ➔</button>`;
+  });
+}
+
 function renderToday() {
   const t = appState.tickers[appState.currentTicker];
+  renderRuleNotices(t);
   const session = currentMarketSession();
   renderTodaySession(session);
   renderTodayPosition(t);

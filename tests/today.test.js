@@ -341,6 +341,25 @@ test('알림 버튼은 현재 규칙의 오늘 주문 가격을 쓴다', () => {
   assert.ok(app.els['alert-presets'].innerHTML.includes('오늘의 매도 $51.75'));
 });
 
+test('VR이면 회전 규칙 화면에 다른 규칙임을 알리고, 회전 규칙이면 알리지 않는다', () => {
+  const app = vrReady();
+  ['rescue-rule-notice', 'chart-rule-notice'].forEach(id => {
+    assert.strictEqual(app.els[id].style.display, '');
+    assert.ok(app.els[id].innerHTML.includes('VR 규칙'));
+  });
+  app.run('setPlanRule("ROTATION")');
+  ['rescue-rule-notice', 'chart-rule-notice'].forEach(id => {
+    assert.strictEqual(app.els[id].style.display, 'none');
+  });
+});
+
+test('회전 규칙 화면에 추천이라는 표현을 남기지 않는다', () => {
+  const html = readProjectFile('index.html');
+  ['추천 20%', '추천 -10%', '추천 매도가', '추천 재매수가', '추천 타점'].forEach(text => {
+    assert.ok(!html.includes(text), text);
+  });
+});
+
 test('코드가 찾는 화면 요소는 모두 실제로 있다', () => {
   const dir = path.join(__dirname, '..', 'js');
   const sources = fs.readdirSync(dir).map(file => fs.readFileSync(path.join(dir, file), 'utf8'));
