@@ -927,20 +927,17 @@ async function fetchFromTwelveData(ticker, apiKey) {
   return { bars, livePrice, prevClose, sessionLabel, source: 'Twelve Data' };
 }
 
-async function fetchFromYahooProxies(ticker) {
-  const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=3mo&includePrePost=true`;
+// 무료 프록시 여러 곳에 동시에 Yahoo 차트를 요청하고 가장 먼저 온 유효한 응답을 쓴다 (첫 응답이 느린 경우가 많음)
+async function fetchYahooChartViaProxies(yahooUrl, timeoutMs = QUOTE_TIMEOUT_MS) {
   // corsproxy.io는 2026-11 기준 API 키 없이는 401/403을 돌려줘 제외
   const endpoints = [
     `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`,
     `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(yahooUrl)}`
   ];
-
-  // 모든 경로에 동시에 요청하고 가장 먼저 유효한 응답을 쓴다 (무료 프록시는 첫 응답이 느린 경우가 많음)
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), QUOTE_TIMEOUT_MS);
-  let chartData;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    chartData = await Promise.any(endpoints.map(async url => {
+    return await Promise.any(endpoints.map(async url => {
       const res = await fetch(url, { signal: controller.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
@@ -952,6 +949,11 @@ async function fetchFromYahooProxies(ticker) {
     clearTimeout(timeoutId);
     controller.abort(); // 아직 응답하지 않은 나머지 요청 정리
   }
+}
+
+async function fetchFromYahooProxies(ticker) {
+  const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=3mo&includePrePost=true`;
+  const chartData = await fetchYahooChartViaProxies(yahooUrl);
 
   const meta = chartData.meta;
   const quote = chartData.indicators.quote[0];
@@ -1145,7 +1147,7 @@ function recalcAll(syncFromDOM = true) {
   if (t.currentPrice >= breakevenPrice) {
     document.getElementById('why-hard-explanation').innerHTML = `
       🎉 <strong>축하합니다! 현재 주가(${formatUSD(t.currentPrice)})가 내 본전 탈출 목표가(${formatUSD(breakevenPrice)}) 이상입니다!</strong>
-      이제 상단의 <strong>[🌱 STEP 2. 꾸준한 수익 창출 모드]</strong> 탭을 눌러 다시는 물리지 않는 40분할 안전 복리 투자를 시작하세요!
+      다음 운용을 고민 중이라면 <strong>[🌱 40분할]</strong> 메뉴의 🧪 과거 검증에서 이 규칙의 실제 성적(최대 낙폭·갇힌 기간 포함)부터 확인해 보세요.
     `;
   } else {
     const bouncePct = (((t.autoSellTarget1 - t.currentPrice) / t.currentPrice) * 100).toFixed(1);
@@ -1348,10 +1350,17 @@ function recalcGrowthMode(syncFromDOM = true) {
 
   if (rsi <= 38 || cur <= t.bbLower * 1.02) {
     boosterMultiplier = 1.5;
-    aiTipText = `🔥 <strong>RSI 저점 부스터 조건 충족</strong> 현재 차트가 과매도 바닥권(RSI ${rsi.toFixed(1)})입니다. 오늘은 평단가를 크게 낮출 기회이므로 1.5회분(<strong>${formatUSD(oneUnitUSD * 1.5)}</strong>) 매수를 추천합니다!`;
+    aiTipText = `🔥 <strong>RSI 저점 부스터 조건 충족</strong> 현재 차트가 과매도 바닥권(RSI ${rsi.toFixed(1)})입니다. 부스터 규칙상 오늘은 1.5회분(<strong>${formatUSD(oneUnitUSD * 1.5)}</strong>)을 매수합니다.`;
   } else if (rsi >= 64) {
     boosterMultiplier = 0.5;
-    aiTipText = `🛡️ <strong>RSI 고점 방어 조건 충족</strong> 현재 단기 과열권(RSI ${rsi.toFixed(1)})이므로 비싸게 많이 사지 않도록 오늘은 0.5회분(<strong>${formatUSD(oneUnitUSD * 0.5)}</strong>)만 가볍게 매수하세요!`;
+    aiTipText = `🛡️ <strong>RSI 고점 방어 조건 충족</strong> 현재 단기 과열권(RSI ${rsi.toFixed(1)})이라 부스터 규칙상 오늘은 0.5회분(<strong>${formatUSD(oneUnitUSD * 0.5)}</strong>)만 매수합니다.`;
+  }
+
+  // 과거 검증 결과가 있으면 부스터가 실제로 도움이 됐는지 같이 보여준다
+  const splitBt = getSplitBacktestResult(appState.currentTicker);
+  if (splitBt && splitBt.result.overall) {
+    const { plain, booster } = splitBt.result.overall;
+    aiTipText += `<br/><small style="color:#64748b">🧪 과거 검증(상장 초부터): 부스터 사용 연복리 ${formatBtSignedPct(booster.cagr)} · 미사용 ${formatBtSignedPct(plain.cagr)} — 부스터 없이 매일 1회분만 사는 선택지도 있습니다.</small>`;
   }
 
   const todayBudget = Math.min(remainingCash, oneUnitUSD * boosterMultiplier);
@@ -1380,7 +1389,7 @@ function recalcGrowthMode(syncFromDOM = true) {
     buyBox.innerHTML = `
       <strong>📌 [전반전 2분할 LOC 매수 주문표]</strong><br/>
       1️⃣ <strong>평단가 LOC 매수 (절반):</strong> 내 평단가인 <strong>${formatUSD(order1Price)}</strong>에 <strong>${order1Shares}주</strong> LOC 매수 걸기 <small style="color:#64748b">(종가가 내 평단가보다 낮을 때만 체결되어 평단가를 낮춤)</small><br/>
-      2️⃣ <strong>확실한 체결용 LOC 매수 (절반):</strong> 현재가 대비 여유 있는 <strong>${formatUSD(order2Price)}</strong>에 <strong>${order2Shares}주</strong> LOC 매수 걸기 <small style="color:#64748b">(무조건 종가에 체결되어 주식 수를 모음)</small>
+      2️⃣ <strong>체결 우선 LOC 매수 (절반):</strong> 현재가 대비 여유 있는 <strong>${formatUSD(order2Price)}</strong>에 <strong>${order2Shares}주</strong> LOC 매수 걸기 <small style="color:#64748b">(종가가 이 가격 이하이면 체결 · 장중 5% 넘게 급등하면 체결되지 않음)</small>
     `;
   } else {
     // 후반전: 전액 내 평단가 이하에만 LOC 매수
@@ -1420,7 +1429,8 @@ function recalcGrowthMode(syncFromDOM = true) {
     sellTip.innerHTML = `💡 만약 오늘 밤 ${formatUSD(targetSellPrice)}에 도달해 전량 매도되었다면, 우측 상단 <strong>[🎉 목표 달성! 이번 사이클 익절 확정하기]</strong> 버튼을 눌러 수익을 기록하고 1회차부터 새로 시작하세요!`;
   }
 
-  // 연간 복리 시뮬레이터 & 명예의 전당 렌더링
+  // 과거 검증 · 연간 복리 시뮬레이터 & 명예의 전당 렌더링
+  renderSplitBacktest();
   renderGrowthCompoundAndHistory();
 }
 
@@ -1590,32 +1600,44 @@ function renderGrowthCompoundAndHistory() {
   document.getElementById('g-cumulative-profit-badge').textContent =
     `누적 확정 수익: ${formatSignedUSD(g.cumulativeProfit || 0)} (${formatKRW(g.cumulativeProfit || 0)})`;
 
-  const avgCycleYield = (g.targetProfitPct / 100) * 0.55;
+  // 과거 검증을 돌렸으면 실제 평균(졸업 1회 수익·연간 졸업 횟수)을, 아니면 앱 기본 가정치를 쓴다
+  const splitBt = getSplitBacktestResult(appState.currentTicker);
+  const btAll = splitBt && splitBt.result.overall ? splitBt.result.overall.plain : null;
+  const useBt = !!(btAll && btAll.avgCycleProfit != null && btAll.cyclesPerYear > 0);
+  const avgCycleYield = useBt ? btAll.avgCycleProfit : (g.targetProfitPct / 100) * 0.55;
+  const cyclesPerYear = useBt ? btAll.cyclesPerYear : 6;
+  const monthsPerCycle = 12 / cyclesPerYear;
   const oneCycleProfit = g.totalBudget * avgCycleYield;
-  const sixCyclesAsset = g.totalBudget * Math.pow(1 + avgCycleYield, 6);
-  const sixCyclesProfit = sixCyclesAsset - g.totalBudget;
+  const oneYearAsset = g.totalBudget * (useBt ? 1 + btAll.cagr : Math.pow(1 + avgCycleYield, cyclesPerYear));
+  const oneYearProfit = oneYearAsset - g.totalBudget;
 
   const summaryBox = document.getElementById('g-compound-summary');
   if (summaryBox) {
+    const caveat = useBt
+      ? `🧪 상장 초부터 과거 일봉으로 검증한 평균입니다 (1년 값은 실제 연복리 ${formatBtSignedPct(btAll.cagr)} 기준). 같은 기간 최대 낙폭 ${formatBtSignedPct(btAll.mdd, 0)}, 시드를 다 쓰고 최장 ${btAll.maxStuckDays.toLocaleString()}거래일 갇힌 구간이 있었습니다. 양도소득세(22%)·환전 비용은 반영되지 않았습니다.`
+      : `⚠️ 앱 기본 가정치입니다 (매 사이클 시드 55% 소진 후 +${g.targetProfitPct}% 졸업, 연 6회 전부 성공). 위 <strong>🧪 과거 검증</strong>을 실행하면 실제 과거 평균으로 바뀝니다. 실패·장기 물림 사이클, 양도소득세(22%), 환전 비용은 반영되지 않았습니다.`;
     summaryBox.innerHTML = `
       <div class="diag-item">
-        <span class="diag-label">1회 사이클 졸업 시 기대 순수익 (평균)</span>
-        <strong class="diag-value" style="color:var(--accent-green);">+${formatUSD(oneCycleProfit)}</strong>
-        <span class="diag-sub">${formatKRW(oneCycleProfit)} (시드 평균 55% 소진 후 +${g.targetProfitPct}% 익절 기준)</span>
+        <span class="diag-label">졸업 1회 평균 순수익 ${useBt ? '(과거 평균)' : '(가정치)'}</span>
+        <strong class="diag-value" style="color:var(--accent-green);">${formatSignedUSD(oneCycleProfit)}</strong>
+        <span class="diag-sub">${formatKRW(oneCycleProfit)} (시드 대비 ${formatBtSignedPct(avgCycleYield)})</span>
       </div>
       <div class="diag-item">
-        <span class="diag-label">1년(약 6회 졸업) 복리 운영 시 기대 순수익</span>
-        <strong class="diag-value" style="color:var(--accent-blue);">+${formatUSD(sixCyclesProfit)}</strong>
-        <span class="diag-sub">${formatKRW(sixCyclesProfit)} 수익 증가</span>
+        <span class="diag-label">1년(약 ${cyclesPerYear.toFixed(1)}회 졸업) 운영 시 순수익 ${useBt ? '(과거 연복리)' : '(가정치)'}</span>
+        <strong class="diag-value" style="color:var(--accent-blue);">${formatSignedUSD(oneYearProfit)}</strong>
+        <span class="diag-sub">${formatKRW(oneYearProfit)}</span>
       </div>
       <div class="diag-item highlight-diag">
-        <span class="diag-label">1년 뒤 예상 총 자산 (원금+복리수익)</span>
-        <strong class="diag-value">${formatUSD(sixCyclesAsset)}</strong>
-        <span class="diag-sub">${formatKRW(sixCyclesAsset)}</span>
+        <span class="diag-label">1년 뒤 총 자산 (원금+수익)</span>
+        <strong class="diag-value">${formatUSD(oneYearAsset)}</strong>
+        <span class="diag-sub">${formatKRW(oneYearAsset)}</span>
       </div>
-      <div class="diag-sub" style="grid-column:1/-1;">⚠️ 모든 사이클이 졸업에 성공한다는 가정치입니다. 실패·장기 물림 사이클, 양도소득세(22%), 환전 비용은 반영되지 않았습니다.</div>
+      <div class="diag-sub" style="grid-column:1/-1;">${caveat}</div>
     `;
   }
+
+  const periodTh = document.getElementById('g-compound-period-th');
+  if (periodTh) periodTh.textContent = `졸업 횟수 (약 ${monthsPerCycle.toFixed(1)}개월/회${useBt ? ' · 과거 평균' : ' · 가정치'})`;
 
   const cTbody = document.getElementById('g-compound-tbody');
   if (cTbody) {
@@ -1625,10 +1647,10 @@ function renderGrowthCompoundAndHistory() {
       const netProfit = asset - g.totalBudget;
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><strong>${i}회 졸업 성공 시</strong></td>
-        <td>약 ${i * 1.5}개월 뒤</td>
+        <td><strong>${i}회 졸업 시</strong></td>
+        <td>약 ${(i * monthsPerCycle).toFixed(1)}개월 뒤</td>
         <td><strong>${formatUSD(asset)}</strong></td>
-        <td style="color:var(--accent-green); font-weight:800;">+${formatUSD(netProfit)}</td>
+        <td style="color:var(--accent-green); font-weight:800;">${formatSignedUSD(netProfit)}</td>
         <td>${formatKRW(asset)}</td>
       `;
       cTbody.appendChild(tr);
@@ -1694,6 +1716,341 @@ function renderGrowthCompoundAndHistory() {
     }
     hTbody.appendChild(tr);
   });
+}
+
+// =========================================================================
+// [과거 검증] 상장 이후 일봉으로 앱 규칙을 백테스트 (엔진은 backtest.js)
+// =========================================================================
+const BT_HISTORY_STORAGE_PREFIX = 'bt_history_v1_'; // 백업 코드에 넣지 않는 기기별 캐시
+const BT_HISTORY_TTL_MS = 12 * 60 * 60 * 1000;
+const BT_HISTORY_TIMEOUT_MS = 30000;
+const btHistory = {}; // ticker → { at, source, bars }
+const btResults = { rotation: {}, split: {} }; // ticker → { key, result }
+const btLoading = {};
+let btRotationTimer = null;
+
+function readBacktestHistoryCache(ticker) {
+  if (btHistory[ticker]) return btHistory[ticker];
+  try {
+    const raw = localStorage.getItem(BT_HISTORY_STORAGE_PREFIX + ticker);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.bars) || parsed.bars.length < 300) return null;
+    const bars = parsed.bars.map(([d, o, h, l, c]) => ({ d, o, h, l, c }));
+    btHistory[ticker] = { at: Number(parsed.at) || 0, source: parsed.source || '', bars };
+    return btHistory[ticker];
+  } catch (e) {
+    return null;
+  }
+}
+
+function writeBacktestHistoryCache(ticker, entry) {
+  btHistory[ticker] = entry;
+  try {
+    const compact = entry.bars.map(b => [b.d, ...[b.o, b.h, b.l, b.c].map(v => Number(v.toPrecision(6)))]);
+    localStorage.setItem(BT_HISTORY_STORAGE_PREFIX + ticker, JSON.stringify({ at: entry.at, source: entry.source, bars: compact }));
+  } catch (e) {
+    // 저장 공간이 부족해도 이번 세션 메모리 캐시로는 계속 쓴다
+  }
+}
+
+function cleanHistoryBars(bars) {
+  const out = bars
+    .filter(b => b.d && [b.o, b.h, b.l, b.c].every(v => Number.isFinite(v) && v > 0))
+    .sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : 0));
+  return out.filter((b, i) => i === 0 || b.d !== out[i - 1].d);
+}
+
+async function fetchBacktestHistory(ticker) {
+  const apiKey = getQuoteApiKey();
+  let twelveError = null;
+  if (apiKey) {
+    try {
+      const series = await fetchTwelveJson(`time_series?symbol=${encodeURIComponent(ticker)}&interval=1day&outputsize=5000`, apiKey);
+      const bars = cleanHistoryBars((series.values || []).map(v => ({
+        d: String(v.datetime).slice(0, 10), o: Number(v.open), h: Number(v.high), l: Number(v.low), c: Number(v.close)
+      })));
+      if (bars.length >= 300) return { at: Date.now(), source: 'Twelve Data', bars };
+      twelveError = '일봉 데이터 부족';
+    } catch (e) {
+      twelveError = e.message;
+    }
+  }
+
+  const period2 = Math.floor(Date.now() / 1000);
+  const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&period1=0&period2=${period2}`;
+  try {
+    const result = await fetchYahooChartViaProxies(yahooUrl, BT_HISTORY_TIMEOUT_MS);
+    const q = result.indicators.quote[0];
+    const bars = cleanHistoryBars((result.timestamp || []).map((ts, i) => ({
+      d: new Date(ts * 1000).toISOString().slice(0, 10),
+      o: Number(q.open[i]), h: Number(q.high[i]), l: Number(q.low[i]), c: Number(q.close[i])
+    })));
+    if (bars.length < 300) throw new Error('일봉 데이터 부족');
+    return { at: Date.now(), source: 'Yahoo(무료 경로)', bars };
+  } catch (e) {
+    throw new Error(twelveError ? `Twelve Data: ${twelveError} / 무료 경로 응답 없음` : '무료 경로 응답 없음 · 🔑 시세 키를 등록하면 안정적으로 받을 수 있습니다');
+  }
+}
+
+// allowNetwork가 false면 이 기기에 저장된 일봉만 쓴다 (자동 갱신이 API 한도를 쓰지 않도록)
+async function loadBacktestHistory(ticker, allowNetwork) {
+  const cached = readBacktestHistoryCache(ticker);
+  if (cached && (!allowNetwork || Date.now() - cached.at < BT_HISTORY_TTL_MS)) return cached;
+  if (!allowNetwork) return null;
+  try {
+    const fresh = await fetchBacktestHistory(ticker);
+    writeBacktestHistoryCache(ticker, fresh);
+    return fresh;
+  } catch (e) {
+    if (cached) return cached; // 받아오지 못하면 예전에 받은 일봉으로라도 검증
+    throw e;
+  }
+}
+
+function formatBtPct(v, digits = 0) {
+  return v == null || !Number.isFinite(v) ? '-' : `${v.toFixed(digits)}%`;
+}
+
+function formatBtSignedPct(ratio, digits = 1) {
+  if (ratio == null || !Number.isFinite(ratio)) return '-';
+  const v = ratio * 100;
+  return `${v >= 0 ? '+' : ''}${v.toFixed(digits)}%`;
+}
+
+function btDataLine(entry) {
+  const bars = entry.bars;
+  const fetched = entry.at ? new Date(entry.at).toLocaleDateString('ko-KR') : '-';
+  return `데이터: ${escapeHTML(entry.source)} 일봉 ${bars[0].d} ~ ${bars[bars.length - 1].d} (${bars.length.toLocaleString()}거래일 · ${fetched} 받음)`;
+}
+
+async function runBacktestWithHistory(kind, allowNetwork) {
+  const ticker = appState.currentTicker;
+  const box = document.getElementById(kind === 'rotation' ? 'bt-rotation-result' : 'bt-split-result');
+  if (!box) return;
+  if (allowNetwork) {
+    if (btLoading[ticker]) return;
+    btLoading[ticker] = true;
+    box.innerHTML = `<div class="bt-placeholder">⏳ ${ticker} 상장 이후 일봉을 받아오는 중입니다... (최대 30초)</div>`;
+  }
+  try {
+    await loadBacktestHistory(ticker, allowNetwork);
+    if (ticker !== appState.currentTicker) return;
+    // 일봉은 두 검증이 같이 쓰므로 양쪽을 모두 다시 그린다 (40분할 쪽은 복리 시뮬레이터도 함께 갱신)
+    renderRotationBacktest();
+    recalcGrowthMode(false);
+  } catch (e) {
+    if (ticker === appState.currentTicker) {
+      box.innerHTML = `<div class="bt-placeholder bt-error">⚠️ 과거 일봉을 받지 못했습니다: ${escapeHTML(e.message)}</div>`;
+    }
+  } finally {
+    if (allowNetwork) btLoading[ticker] = false;
+  }
+}
+
+function runRotationBacktest() {
+  runBacktestWithHistory('rotation', true);
+}
+
+function runSplitBacktest() {
+  runBacktestWithHistory('split', true);
+}
+
+// 시뮬레이터 슬라이더를 움직일 때마다 다시 계산 (계산은 수십 ms라 짧게 모아서 한 번만)
+function scheduleRotationBacktest() {
+  clearTimeout(btRotationTimer);
+  btRotationTimer = setTimeout(renderRotationBacktest, 250);
+}
+
+function getRotationBacktestParams(t) {
+  const cur = t.currentPrice;
+  const sellPrice = parseFloat(document.getElementById('sim-sell-price').value) || t.autoSellTarget1 || cur;
+  const buyPrice = parseFloat(document.getElementById('sim-buy-price').value) || 0;
+  const dropSlider = (parseFloat(document.getElementById('drop-ratio-slider').value) || 10) / 100;
+  const up = Math.min(1, Math.max(0.01, cur > 0 ? sellPrice / cur - 1 : 0.09));
+  const drop = buyPrice > 0 && buyPrice < sellPrice ? Math.min(0.9, Math.max(0.01, 1 - buyPrice / sellPrice)) : dropSlider;
+  const ratio = (parseFloat(document.getElementById('sell-ratio-slider').value) || 20) / 100;
+  const timeout = parseInt(document.getElementById('bt-rot-timeout').value, 10) || 0;
+  const crashOnly = document.getElementById('bt-rot-start').value === 'crash';
+  const totalPrincipal = getTotalPrincipal(t) || (t.shares * t.avgPrice);
+  const breakeven = t.shares > 0 ? Math.max(0, totalPrincipal - (t.reservedCash || 0)) / t.shares : 0;
+  const breakevenMultiple = cur > 0 && breakeven > cur ? breakeven / cur : 0;
+  return { up, drop, ratio, timeout, crashOnly, breakevenMultiple };
+}
+
+function renderRotationBacktest() {
+  const box = document.getElementById('bt-rotation-result');
+  if (!box) return;
+  const ticker = appState.currentTicker;
+  const t = appState.tickers[ticker];
+  const p = getRotationBacktestParams(t);
+  const ruleText = `규칙: 현재가 대비 <strong>+${(p.up * 100).toFixed(1)}%</strong> 반등에 보유의 <strong>${Math.round(p.ratio * 100)}%</strong> 매도 → 매도가 대비 <strong>-${(p.drop * 100).toFixed(1)}%</strong>에 재매수` +
+    (p.timeout ? ` (재매수가 ${p.timeout}거래일 안 오면 그날 종가에 재매수)` : ' (재매수가 올 때까지 대기 · 앱 기본 규칙)');
+  document.getElementById('bt-rot-rule').innerHTML = ruleText;
+
+  const history = btHistory[ticker] || readBacktestHistoryCache(ticker);
+  if (!history) {
+    box.innerHTML = `<div class="bt-placeholder">아직 검증 전입니다. <strong>📊 과거 일봉으로 검증</strong>을 누르면 ${ticker} 상장 이후 일봉을 한 번 받아 이 기기에 저장합니다${getQuoteApiKey() ? ' (Twelve Data 1회 조회)' : ''}.</div>`;
+    return;
+  }
+
+  const key = JSON.stringify([history.at, p.up, p.drop, p.ratio, p.timeout, p.crashOnly, p.breakevenMultiple.toFixed(3)]);
+  let cachedResult = btResults.rotation[ticker];
+  if (!cachedResult || cachedResult.key !== key) {
+    cachedResult = {
+      key,
+      result: btRotationStudy(history.bars, {
+        up: p.up, drop: p.drop, ratio: p.ratio, timeout: p.timeout,
+        crashDrawdown: p.crashOnly ? 0.45 : 0,
+        breakevenMultiple: p.breakevenMultiple
+      })
+    };
+    btResults.rotation[ticker] = cachedResult;
+  }
+  const r = cachedResult.result;
+  const [h1, h2] = r.horizons;
+  const startLabel = p.crashOnly ? '직전 1년 최고 종가 대비 -45% 이하로 떨어진 날' : '상장 1년 뒤부터 모든 거래일';
+
+  if (!h1 || !h1.n) {
+    box.innerHTML = `<div class="bt-placeholder">${startLabel}이 1년 이상 지난 시작점이 없어 비교할 수 없습니다.<br/><small>${btDataLine(history)}</small></div>`;
+    return;
+  }
+
+  const median = h1.medianRatio;
+  const verdict = median < 0.99
+    ? { cls: 'bt-verdict-bad', text: `⚠️ 과거에는 이 규칙보다 <strong>그냥 보유하는 쪽이 대체로 나았습니다.</strong> 1년 뒤 회전 쪽 자산이 보유 대비 중앙값 ${formatBtSignedPct(median - 1)}였습니다.` }
+    : median > 1.01
+      ? { cls: 'bt-verdict-good', text: `✅ 과거에는 이 규칙이 보유보다 나은 경우가 많았습니다. 1년 뒤 회전 쪽 자산이 보유 대비 중앙값 ${formatBtSignedPct(median - 1)}였습니다.` }
+      : { cls: 'bt-verdict-flat', text: `➖ 과거에는 보유와 큰 차이가 없었습니다 (1년 뒤 중앙값 ${formatBtSignedPct(median - 1)}).` };
+
+  const horizonItem = (h, label) => !h || !h.n ? '' : `
+    <div class="diag-item">
+      <span class="diag-label">${label} 회전이 보유보다 나았던 비율</span>
+      <strong class="diag-value">${formatBtPct(h.beatPct)}</strong>
+      <span class="diag-sub">자산 비율 중앙값 ${h.medianRatio.toFixed(3)} · 그 시점에 재매수를 못 해 현금이 묶여 있던 비율 ${formatBtPct(h.stuckPct)} (${h.n.toLocaleString()}개 시작점)</span>
+    </div>`;
+
+  let breakevenHTML = '';
+  const be = r.breakeven;
+  if (be && be.n) {
+    const needed = (be.multiple - 1) * 100;
+    breakevenHTML = `
+      <div class="diag-item highlight-diag">
+        <span class="diag-label">지금 본전까지 +${needed.toFixed(0)}% 필요 · 과거 같은 상승을 기다렸다면</span>
+        <strong class="diag-value">회전이 먼저 도달 ${formatBtPct(be.rotFasterPct)}</strong>
+        <span class="diag-sub">본전 도달: 보유 ${be.holdReached}/${be.n} · 회전 ${be.rotReached}/${be.n} · 걸린 거래일 중앙값 보유 ${be.medianHoldDays ?? '-'} / 회전 ${be.medianRotDays ?? '-'}</span>
+      </div>`;
+  }
+
+  box.innerHTML = `
+    <div class="bt-verdict ${verdict.cls}">${verdict.text}</div>
+    <div class="diagnosis-box">
+      ${horizonItem(h1, '1년 뒤')}
+      ${horizonItem(h2, '2년 뒤')}
+      ${breakevenHTML}
+    </div>
+    <div class="bt-notes">
+      <div>시작점: ${startLabel} ${r.startCount.toLocaleString()}일 · 서로 겹치지 않는 하락 구간은 약 <strong>${r.episodes.length}번</strong>뿐이라 통계적 증명이 아닌 방향성으로 보세요.</div>
+      <div>회전이 지는 주된 이유: 팔고 난 뒤 눌림목이 오지 않고 계속 오르면 현금이 묶인 채 회복을 놓칩니다. 위 '재매수 대기 한도'를 바꿔 비교해 보세요.</div>
+      <div>${btDataLine(history)} · 수수료 편도 0.1%, 지정가는 고가·저가가 닿은 날 체결 가정, 세금 미반영. 과거 결과가 미래를 보장하지 않습니다.</div>
+    </div>
+  `;
+}
+
+function getSplitBacktestResult(ticker) {
+  const history = btHistory[ticker] || readBacktestHistoryCache(ticker);
+  if (!history) return null;
+  const g = appState.tickers[ticker].growth;
+  const opts = { splits: g.splits || 40, target: (g.targetProfitPct || 10) / 100 };
+  const key = JSON.stringify([history.at, opts.splits, opts.target]);
+  let cached = btResults.split[ticker];
+  if (!cached || cached.key !== key) {
+    cached = { key, opts, history, result: btSplitStudy(history.bars, opts) };
+    btResults.split[ticker] = cached;
+  }
+  return cached;
+}
+
+function renderSplitBacktest() {
+  const box = document.getElementById('bt-split-result');
+  if (!box) return;
+  const ticker = appState.currentTicker;
+  const g = appState.tickers[ticker].growth;
+  document.getElementById('bt-split-rule').innerHTML =
+    `규칙: 현재 설정 <strong>${g.splits || 40}분할 · +${g.targetProfitPct || 10}% 졸업</strong>, 졸업 수익은 다음 사이클 시드에 합산(복리). RSI 부스터를 쓴 경우·안 쓴 경우·그냥 보유를 함께 비교합니다.`;
+
+  const cached = getSplitBacktestResult(ticker);
+  if (!cached) {
+    box.innerHTML = `<div class="bt-placeholder">아직 검증 전입니다. <strong>📊 과거 일봉으로 검증</strong>을 누르면 ${ticker} 상장 이후 일봉을 한 번 받아 이 기기에 저장합니다${getQuoteApiKey() ? ' (Twelve Data 1회 조회)' : ''}.</div>`;
+    return;
+  }
+  const { result, history } = cached;
+  const all = result.overall;
+  if (!all) {
+    box.innerHTML = `<div class="bt-placeholder">검증할 기간(최소 1년)이 부족합니다.<br/><small>${btDataLine(history)}</small></div>`;
+    return;
+  }
+
+  const p = all.plain;
+  const boosterWorseYears = result.rows.filter(r => r.booster.cagr < r.plain.cagr).length;
+  const cagrs = result.rows.map(r => r.plain.cagr);
+  const rowsHTML = result.rows.map(r => {
+    const best = Math.max(r.plain.cagr, r.booster.cagr, r.plain.holdCagr);
+    const cell = v => `<td${v === best ? ' class="bt-best"' : ''}>${formatBtSignedPct(v)}</td>`;
+    return `
+      <tr>
+        <td><strong>${r.startDate.slice(0, 4)}년</strong></td>
+        ${cell(r.plain.cagr)}
+        ${cell(r.booster.cagr)}
+        ${cell(r.plain.holdCagr)}
+        <td>${formatBtSignedPct(r.plain.mdd, 0)} / ${formatBtSignedPct(r.plain.holdMdd, 0)}</td>
+        <td>${r.plain.cyclesPerYear.toFixed(1)}회 · ${formatBtSignedPct(r.plain.avgCycleProfit)}</td>
+        <td>${r.plain.maxStuckDays.toLocaleString()}일</td>
+      </tr>`;
+  }).join('');
+
+  box.innerHTML = `
+    <div class="diagnosis-box">
+      <div class="diag-item">
+        <span class="diag-label">졸업 1회 평균 순수익 (시드 대비)</span>
+        <strong class="diag-value">${formatBtSignedPct(p.avgCycleProfit)}</strong>
+        <span class="diag-sub">연평균 ${p.cyclesPerYear.toFixed(1)}회 졸업 · 졸업까지 중앙값 ${p.medianCycleDays ?? '-'}거래일 (앱 기본 가정은 1회 +${((g.targetProfitPct || 10) * 0.55).toFixed(1)}%, 연 6회)</span>
+      </div>
+      <div class="diag-item">
+        <span class="diag-label">연복리 (시작 연도에 따라)</span>
+        <strong class="diag-value">${formatBtSignedPct(Math.min(...cagrs), 0)} ~ ${formatBtSignedPct(Math.max(...cagrs), 0)}</strong>
+        <span class="diag-sub">상장 초부터 시작: 40분할 ${formatBtSignedPct(p.cagr)} · 그냥 보유 ${formatBtSignedPct(p.holdCagr)}</span>
+      </div>
+      <div class="diag-item highlight-diag">
+        <span class="diag-label">버텨야 했던 최악의 구간</span>
+        <strong class="diag-value">낙폭 ${formatBtSignedPct(p.mdd, 0)}</strong>
+        <span class="diag-sub">시드를 다 쓰고 졸업만 기다린 최장 ${p.maxStuckDays.toLocaleString()}거래일(약 ${(p.maxStuckDays / BT_YEAR_BARS).toFixed(1)}년) · 이런 소진 ${p.stuckEpisodes}번</span>
+      </div>
+    </div>
+    <div class="bt-verdict ${boosterWorseYears > result.rows.length / 2 ? 'bt-verdict-bad' : 'bt-verdict-flat'}">
+      RSI 부스터는 시작 연도 ${result.rows.length}개 중 <strong>${boosterWorseYears}개</strong>에서 연복리를 낮췄습니다.
+    </div>
+    <div class="table-responsive">
+      <table class="bt-table">
+        <thead>
+          <tr>
+            <th>시작</th>
+            <th>40분할 연복리</th>
+            <th>+ RSI 부스터</th>
+            <th>그냥 보유</th>
+            <th>최대 낙폭 (40분할 / 보유)</th>
+            <th>졸업 횟수/년 · 1회 수익</th>
+            <th>최장 갇힘</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHTML}</tbody>
+      </table>
+    </div>
+    <div class="bt-notes">
+      <div>각 행은 그 해 첫 거래일에 시작해 데이터 끝(${result.to})까지 운용한 결과입니다. 데이터 끝에 아직 갇혀 있는 사이클은 평가손익으로 계산합니다.</div>
+      <div>${btDataLine(history)} · 수수료 편도 0.1%, LOC는 종가 체결, 소수점 수량, 양도세 22% 미반영. 2010년 이후는 기술주 강세장이었고 과거 결과가 미래를 보장하지 않습니다.</div>
+    </div>
+  `;
 }
 
 // =========================================================================
@@ -1798,7 +2155,7 @@ function runSimulator(recalcBuyPriceFromDrop = true, sync = true) {
     if (cycle === 5) {
       document.getElementById('res-5times-target').textContent = formatUSD(cycleTargetPrice);
       document.getElementById('res-5times-shares').innerHTML =
-        `총 보유 수량 <strong>${simLoopShares.toLocaleString()}주</strong>로 증가 (${formatUSD(oldBreakevenPrice)} 안 가도 탈출!)`;
+        `총 보유 수량 <strong>${simLoopShares.toLocaleString()}주</strong> (5번 모두 같은 가격에 체결된다는 가정)`;
     }
 
     const tr = document.createElement('tr');
@@ -1811,6 +2168,8 @@ function runSimulator(recalcBuyPriceFromDrop = true, sync = true) {
     `;
     tbody.appendChild(tr);
   }
+
+  scheduleRotationBacktest();
 }
 
 function fillFromSimulator() {
@@ -1994,7 +2353,7 @@ function buildPersonalizedStrategyHTML(t) {
     const statusBanner = isReached
       ? `<div style="color:#059669;font-weight:800;margin-bottom:6px;">⚡ 현재가(${formatUSD(cur)})가 이미 목표 재매수 구간에 들어왔습니다! 지금 확보한 현금으로 재매수를 실행하세요!</div>`
       : cur > sellP
-        ? `<div style="color:#b45309;font-weight:700;margin-bottom:6px;">💡 현재가(${formatUSD(cur)})가 내 매도가(${formatUSD(sellP)})보다 높지만 추격 매수하지 마세요! 남은 ${t.shares.toLocaleString()}주의 가치가 함께 오르고 있으니 아래 눌림목 가격에 지정가 매수를 걸어두시면 됩니다.</div>`
+        ? `<div style="color:#b45309;font-weight:700;margin-bottom:6px;">💡 현재가(${formatUSD(cur)})가 내 매도가(${formatUSD(sellP)})보다 높습니다. 다시 사면 매도 전보다 주식 수가 줄어듭니다. 다만 과거 데이터에서는 이렇게 오르는 동안 눌림목만 기다리다 현금이 오래 묶인 경우가 많았으니, 언제까지 기다릴지 미리 정해 두세요 (🛠️ 탈출시뮬 › 🧪 과거 검증의 '재매수 대기 한도' 비교 참고).</div>`
         : `<div style="color:#0369a1;font-weight:700;margin-bottom:6px;">📉 현재가(${formatUSD(cur)})가 매도가(${formatUSD(sellP)}) 대비 -${(((sellP - cur) / sellP) * 100).toFixed(1)}% 내려와 있습니다. 아래 3가지 목표가 중 원하는 위치에 지정가 재매수 주문을 걸어두세요!</div>`;
 
     return {
@@ -2047,7 +2406,9 @@ function buildPersonalizedStrategyHTML(t) {
       stageClass: 'next-sell-stage',
       html: `
         <div class="mission-header">
-          <div class="mission-title">🎉 [실전 기록 분석] 구출 회전 성공! 다음 회차(Next Cycle) 본전 단축 작전 브리핑</div>
+          <div class="mission-title">${savedTarget > 0
+            ? '🎉 [실전 기록 분석] 재매수 완료 · 탈출가 단축! 다음 회차(Next Cycle) 작전 브리핑'
+            : '🧾 [실전 기록 분석] 재매수 기록 반영 · 탈출가가 낮아지지 않았습니다 (추가 투입 원금·매수가 확인)'}</div>
           <button type="button" class="btn-secondary" onclick="applyCustomPlanToSimulator(${nextSell1}, ${nextRebuy1}, 20)">
             🛠️ 이 다음 작전을 시뮬레이터에 바로 적용 ➔
           </button>
