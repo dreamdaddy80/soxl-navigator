@@ -120,7 +120,7 @@ async function fetchFromTwelveData(ticker, apiKey) {
     }
   }
 
-  return { bars, livePrice, prevClose, sessionLabel, source: 'Twelve Data' };
+  return { bars, livePrice, prevClose, sessionLabel, source: 'Twelve Data', isMarketOpen: quote.is_market_open === true };
 }
 
 // 무료 프록시 여러 곳에 동시에 Yahoo 차트를 요청하고 가장 먼저 온 유효한 응답을 쓴다 (첫 응답이 느린 경우가 많음)
@@ -262,6 +262,7 @@ async function fetchMarketDataAndAnalyze(isAutoRefresh = false) {
     }
 
     t.lastQuoteAt = Date.now();
+    marketOpenHint = typeof market.isMarketOpen === 'boolean' ? market.isMarketOpen : null;
     computeRealisticTargets(t, !isAutoRefresh);
     checkPriceAlerts(ticker, livePrice);
 

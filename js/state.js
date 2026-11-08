@@ -52,6 +52,7 @@ const DEFAULT_STATE = {
       simBuyPrice: 45.09,
       logs: [],
       alerts: [],
+      dailyPlan: null,
       // 본전 탈출 이후 꾸준한 수익 창출 모드(GROWTH) 데이터
       growth: {
         totalBudget: 10000,
@@ -95,6 +96,7 @@ const DEFAULT_STATE = {
       simBuyPrice: 63.77,
       logs: [],
       alerts: [],
+      dailyPlan: null,
       growth: {
         totalBudget: 30000,
         splits: 40,
@@ -162,6 +164,24 @@ function sanitizeAlerts(list) {
     }));
 }
 
+function sanitizeDailyPlan(plan) {
+  if (!plan || typeof plan !== 'object') return null;
+  if (!['SELL', 'REBUY', 'DONE', 'EMPTY'].includes(plan.stage)) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(plan.tradeDay || '') || typeof plan.ledgerKey !== 'string') return null;
+  return {
+    stage: plan.stage,
+    tradeDay: plan.tradeDay,
+    ledgerKey: plan.ledgerKey,
+    price: Number(plan.price) || 0,
+    shares: Number(plan.shares) || 0,
+    basis: Number(plan.basis) || 0,
+    highAtCreate: Number(plan.highAtCreate) || 0,
+    lowAtCreate: Number(plan.lowAtCreate) || 0,
+    custom: plan.custom ? 1 : 0,
+    reason: typeof plan.reason === 'string' ? plan.reason.slice(0, 120) : ''
+  };
+}
+
 function mergeWithDefaults(parsed) {
   const defaults = JSON.parse(JSON.stringify(DEFAULT_STATE));
   const { tickers: defaultTickers, ...defaultTop } = defaults;
@@ -170,12 +190,13 @@ function mergeWithDefaults(parsed) {
   Object.keys(defaultTickers).forEach(sym => {
     const d = defaultTickers[sym];
     const src = parsed?.tickers?.[sym] || {};
-    const { logs: _l, alerts: _a, growth: dGrowth, ...dScalars } = d;
+    const { logs: _l, alerts: _a, dailyPlan: _p, growth: dGrowth, ...dScalars } = d;
     const { history: _h, ...dGrowthScalars } = dGrowth;
     merged.tickers[sym] = {
       ...pickTyped(dScalars, src),
       logs: sanitizeRecords(src.logs, ['SELL', 'BUY', 'DEPOSIT', 'WITHDRAW']),
       alerts: sanitizeAlerts(src.alerts),
+      dailyPlan: sanitizeDailyPlan(src.dailyPlan),
       growth: {
         ...pickTyped(dGrowthScalars, src.growth),
         history: sanitizeRecords(src.growth?.history, ['BUY', 'GRADUATE', 'ADJUST'])

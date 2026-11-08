@@ -21,6 +21,33 @@ function toggleLogTypeHint() {
   }
 }
 
+// 원금 탈출 체결 한 건을 기록하고 잔고를 다시 계산한다. 막힌 입력이면 null
+function recordRescueTrade(t, { type, price, shares, tradeDate, memo }) {
+  ensurePrincipalAnchor(t);
+
+  if (type === 'SELL' && shares > t.shares) {
+    alert('현재 보유 주식 수보다 많이 매도할 수 없습니다.');
+    return null;
+  }
+  if (type === 'WITHDRAW' && price > (t.reservedCash || 0)) {
+    alert(`보유 구출 현금(${formatUSD(t.reservedCash || 0)})보다 많이 인출할 수 없습니다.`);
+    return null;
+  }
+
+  const record = {
+    id: Date.now(),
+    tradeDate,
+    type,
+    price,
+    shares,
+    amount: Number((price * shares).toFixed(2)),
+    memo
+  };
+  t.logs.unshift(record);
+  recalculateRescueBalanceFromLogs(t);
+  return record;
+}
+
 function addTradeLog(e) {
   e.preventDefault();
   const t = appState.tickers[appState.currentTicker];
@@ -31,31 +58,7 @@ function addTradeLog(e) {
   const tradeDate = document.getElementById('log-date').value || todayISO();
 
   if (!price || !shares || price <= 0 || shares <= 0) return;
-
-  ensurePrincipalAnchor(t);
-
-  if (type === 'SELL' && shares > t.shares) {
-    alert('현재 보유 주식 수보다 많이 매도할 수 없습니다.');
-    return;
-  }
-  if (type === 'WITHDRAW' && price > (t.reservedCash || 0)) {
-    alert(`보유 구출 현금(${formatUSD(t.reservedCash || 0)})보다 많이 인출할 수 없습니다.`);
-    return;
-  }
-
-  const amount = Number((price * shares).toFixed(2));
-
-  t.logs.unshift({
-    id: Date.now(),
-    tradeDate,
-    type,
-    price,
-    shares,
-    amount,
-    memo
-  });
-
-  recalculateRescueBalanceFromLogs(t);
+  if (!recordRescueTrade(t, { type, price, shares, tradeDate, memo })) return;
 
   document.getElementById('log-price').value = '';
   document.getElementById('log-shares').value = '';
@@ -120,20 +123,7 @@ function renderLogs() {
   renderJournalAnalytics();
   const t = appState.tickers[appState.currentTicker];
   const tbody = document.getElementById('log-tbody');
-  const alertBox = document.getElementById('active-sell-alert');
-  const overviewMissionBox = document.getElementById('overview-next-mission-box');
   tbody.innerHTML = '';
-
-  const strategy = buildPersonalizedStrategyHTML(t);
-  if (alertBox) {
-    alertBox.className = `mission-briefing-card ${strategy.stageClass}`;
-    alertBox.style.display = 'block';
-    alertBox.innerHTML = strategy.html;
-  }
-  if (overviewMissionBox) {
-    overviewMissionBox.className = `mission-briefing-card ${strategy.stageClass}`;
-    overviewMissionBox.innerHTML = strategy.html;
-  }
 
   if (!t.logs || t.logs.length === 0) {
     tbody.innerHTML = `

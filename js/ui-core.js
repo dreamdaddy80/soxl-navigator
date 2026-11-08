@@ -124,10 +124,7 @@ function populateInputsFromState() {
   const t = appState.tickers[appState.currentTicker];
   ensurePrincipalAnchor(t);
 
-  document.getElementById('initial-shares').value = t.shares;
-  document.getElementById('avg-price').value = Number(t.avgPrice.toFixed(2));
   document.getElementById('current-price').value = t.currentPrice;
-  document.getElementById('reserved-cash').value = Number((t.reservedCash || 0).toFixed(2));
 
   document.getElementById('sell-ratio-slider').value = t.sellRatio;
   document.getElementById('sim-sell-price').value = t.simSellPrice;
@@ -231,9 +228,8 @@ function syncInputsToState() {
   saveState();
 }
 
-function computeRealisticTargets(t, forceSyncToSim = false) {
-  ensurePrincipalAnchor(t);
-  const cur = t.currentPrice;
+// 기준 가격(cur)에서 반등 기준별 매도 목표가를 계산한다. 차트 화면은 현재가, 오늘의 주문은 고정된 기준가를 넣는다
+function computeSellTargets(t, cur) {
   const totalPrincipal = getTotalPrincipal(t) || (t.shares * t.avgPrice);
   const breakevenPrice = t.shares > 0 ? Math.max(0, totalPrincipal - (t.reservedCash || 0)) / t.shares : t.avgPrice;
   const mode = appState.targetMode || 'MID';
@@ -290,6 +286,16 @@ function computeRealisticTargets(t, forceSyncToSim = false) {
     rawSell1 = Math.max(cur * 1.02, rawSell1);
     rawSell2 = Math.max(rawSell1 * 1.03, rawSell2);
   }
+
+  return { sell1: rawSell1, sell2: rawSell2, reason: chosenReason };
+}
+
+function computeRealisticTargets(t, forceSyncToSim = false) {
+  ensurePrincipalAnchor(t);
+  const cur = t.currentPrice;
+  const totalPrincipal = getTotalPrincipal(t) || (t.shares * t.avgPrice);
+  const breakevenPrice = t.shares > 0 ? Math.max(0, totalPrincipal - (t.reservedCash || 0)) / t.shares : t.avgPrice;
+  const { sell1: rawSell1, sell2: rawSell2, reason: chosenReason } = computeSellTargets(t, cur);
 
   t.autoSellTarget1 = Number(rawSell1.toFixed(2));
   t.autoSellTarget2 = Number(rawSell2.toFixed(2));
@@ -349,24 +355,14 @@ function recalcAll(syncFromDOM = true) {
       ? `현재가 대비 <strong>+${neededRiseRate.toFixed(1)}%</strong> 상승 필요`
       : `<strong>🎉 본전 탈출 목표 달성!</strong>`;
 
-  if (t.currentPrice >= breakevenPrice) {
-    document.getElementById('why-hard-explanation').innerHTML = `
-      🎉 <strong>축하합니다! 현재 주가(${formatUSD(t.currentPrice)})가 내 본전 탈출 목표가(${formatUSD(breakevenPrice)}) 이상입니다!</strong>
-      다음 운용을 고민 중이라면 <strong>[🌱 40분할]</strong> 메뉴의 🧪 과거 검증에서 이 규칙의 실제 성적(최대 낙폭·갇힌 기간 포함)부터 확인해 보세요.
-    `;
-  } else {
-    const bouncePct = (((t.autoSellTarget1 - t.currentPrice) / t.currentPrice) * 100).toFixed(1);
-    document.getElementById('why-hard-explanation').innerHTML = `
-      현재 주가(<strong>${formatUSD(t.currentPrice)}</strong>)에서 본전(<strong>${formatUSD(breakevenPrice)}</strong>)까지 한 번에 가려면 <strong>+${neededRiseRate.toFixed(1)}%</strong> 올라야 합니다.
-      본전(${formatUSD(breakevenPrice)})까지 마냥 기다리지 말고, 현재가에서 <strong>+${bouncePct}%</strong> 반등해 <strong>추천 목표 매도가(${formatUSD(t.autoSellTarget1)})</strong>에 닿을 때 보유 물량의 15~20%를 일단 팔고, 다시 눌렸을 때 사서 <strong>탈출 기준선 자체를 ${formatUSD(breakevenPrice)} 아래로 끌어내리세요!</strong>
-    `;
-  }
-
   updateAutoSignalDashboard(breakevenPrice);
   runSimulator(false, false);
   renderLogs();
   renderPriceAlerts();
+  renderToday();
 }
+
+const TODAY_ORDER_POINTER = `시장 위치를 읽는 참고 지표입니다. 실제 주문 가격과 수량은 <button type="button" class="text-link-btn" onclick="switchView('overview')">오늘의 주문 ➔</button>에서 확인하세요.`;
 
 function updateAutoSignalDashboard(breakevenPrice) {
   const ticker = appState.currentTicker;
@@ -411,11 +407,6 @@ function updateAutoSignalDashboard(breakevenPrice) {
   document.getElementById('ind-buy-target').textContent = `${formatUSD(t.autoBuyTarget1)} (매도가 -${buy1Pct}%) / ${formatUSD(t.autoBuyTarget2)}`;
   document.getElementById('ind-buy-basis').textContent = `1차 매도 체결 후 -10% 눌림목 & 볼린저 하단`;
 
-  const topSellEl = document.getElementById('top-sell-target');
-  const topBuyEl = document.getElementById('top-buy-target');
-  if (topSellEl) topSellEl.textContent = `${formatUSD(t.autoSellTarget1)} (+${sell1Pct}%)`;
-  if (topBuyEl) topBuyEl.textContent = `${formatUSD(t.autoBuyTarget1)}`;
-
   const rationaleBox = document.getElementById('target-rationale-box');
   if (rationaleBox) {
     rationaleBox.innerHTML = `
@@ -454,43 +445,26 @@ function updateAutoSignalDashboard(breakevenPrice) {
     return;
   }
 
-  const sell20Shares = Math.round(t.shares * 0.2);
-  const sell15Shares = Math.round(t.shares * 0.15);
-
   if (timingScore >= 64 || rsi >= 62) {
     box.classList.add('sell-mode');
     lSell.classList.add('active');
-    scoreLabel.textContent = `타이밍 점수: ${timingScore}점 (🔴 단기 반등 과열 - 매도·익절 적기!)`;
+    scoreLabel.textContent = `타이밍 점수: ${timingScore}점 (🔴 단기 반등 과열 - 매도 쪽 신호)`;
     title.textContent = `🔴 지금은 [단기 반등 고점 구간]입니다! 일부 매도 또는 익절에 유리한 타이밍입니다.`;
     desc.textContent = `단기 지표(RSI ${rsi.toFixed(1)})가 과열되어 한 차례 눌림목 조정이 나올 가능성이 높습니다.`;
-    const rebuyTarget = (cur * 0.90).toFixed(2);
-    recipe.innerHTML = `
-      <strong>📌 모드별 오늘 밤 추천 행동:</strong><br/>
-      • <strong>[원금 탈출 모드]:</strong> 보유 중인 ${t.shares}주 중 <strong>${sell20Shares}주(20%)</strong>를 <strong>${formatUSD(cur)} ~ ${formatUSD(t.autoSellTarget1)}</strong>에 분할 매도 후, <strong>$${rebuyTarget} 이하</strong>에서 다시 사세요.<br/>
-      • <strong>[수익 창출 모드]:</strong> 평단가 대비 수익 구간이라면 욕심내지 말고 익절하거나 오늘 매수량을 절반(0.5회분)으로 줄이세요!
-    `;
+    recipe.innerHTML = TODAY_ORDER_POINTER;
   } else if (timingScore <= 36 || rsi <= 38 || cur <= bbLower * 1.02) {
     box.classList.add('buy-mode');
     lBuy.classList.add('active');
-    scoreLabel.textContent = `타이밍 점수: ${timingScore}점 (🟢 단기 바닥 과매도 - 매수 적기!)`;
+    scoreLabel.textContent = `타이밍 점수: ${timingScore}점 (🟢 단기 바닥 과매도 - 매수 쪽 신호)`;
     title.textContent = `🟢 지금은 [단기 과매도 바닥 구간]입니다! 저점 매수·재매수에 가장 유리한 타이밍입니다.`;
     desc.textContent = `최근 하락으로 현재가(${formatUSD(cur)})가 단기 바닥권(볼린저 하단 ${formatUSD(bbLower)}, RSI ${rsi.toFixed(1)})에 진입했습니다.`;
-    recipe.innerHTML = `
-      <strong>📌 모드별 오늘 밤 추천 행동:</strong><br/>
-      • <strong>[원금 탈출 모드]:</strong> 규칙상 지금은 매도 구간이 아닙니다. 아껴둔 구출 현금이 있다면 지금 투입해 주식 수를 늘리세요.<br/>
-      • <strong>[수익 창출 모드]:</strong> 평단가를 확 낮출 수 있는 찬스입니다! 오늘 1회분 매수 금액보다 <strong>1.5배 부스터 매수</strong>를 추천합니다!
-    `;
+    recipe.innerHTML = TODAY_ORDER_POINTER;
   } else {
     box.classList.add('neutral');
     lWait.classList.add('active');
-    scoreLabel.textContent = `타이밍 점수: ${timingScore}점 (🟡 중립 구간 - 규칙대로 지정가 주문)`;
-    title.textContent = `🟡 현재가(${formatUSD(cur)})는 중립 위치입니다. 아래 목표 타점에 지정가 주문을 걸어두세요!`;
+    scoreLabel.textContent = `타이밍 점수: ${timingScore}점 (🟡 중립 구간 - 뚜렷한 신호 없음)`;
+    title.textContent = `🟡 현재가(${formatUSD(cur)})는 중립 위치입니다.`;
     desc.textContent = `급하게 추격 매수/매도하기보다 정해진 규칙대로 예약 주문을 걸어두는 것이 가장 안전합니다.`;
-    const expectedRebuyAfterSell1 = (t.autoSellTarget1 * 0.90).toFixed(2);
-    recipe.innerHTML = `
-      <strong>📌 모드별 오늘 밤 추천 행동:</strong><br/>
-      • <strong>[원금 탈출 모드]:</strong> 1차 반등 저항선인 <strong>${formatUSD(t.autoSellTarget1)}</strong>(+${sell1Pct}%)에 <strong>${sell15Shares}주(15%)</strong> 지정가 매도를 걸어두세요. (체결 시 $${expectedRebuyAfterSell1} 이하 재매수)<br/>
-      • <strong>[수익 창출 모드]:</strong> 오늘 배정된 <strong>1회분 금액만큼 정석대로 분할 매수</strong>하고 목표 수익률(+10%) 지정가 매도를 걸어두세요!
-    `;
+    recipe.innerHTML = TODAY_ORDER_POINTER;
   }
 }

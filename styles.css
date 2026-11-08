@@ -2889,3 +2889,331 @@ tbody tr:hover td {
   font-weight: 800;
   color: var(--accent-red);
 }
+
+/* 오늘의 작전 (홈) */
+.today-session {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.today-session-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.today-session-step {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.today-session-step strong {
+  font-size: 0.92rem;
+}
+
+.today-session-step.active {
+  background: #121316;
+  border-color: #121316;
+  color: #ffffff;
+}
+
+.today-session-now {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 0 4px;
+  font-size: 0.86rem;
+}
+
+.today-session-now span {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.today-position {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 760px) {
+  .today-position {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.today-position-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+}
+
+.today-position-item small {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.today-position-item > strong {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.today-position-item > span {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.today-order {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+  border-radius: var(--radius-lg);
+  background: #ffffff;
+  border: 1.5px solid var(--border-color);
+  border-top-width: 6px;
+  box-shadow: var(--shadow-soft);
+}
+
+.today-order-sell { border-top-color: var(--accent-red); }
+.today-order-buy { border-top-color: var(--accent-green); }
+.today-order-done { border-top-color: var(--accent-gold); }
+.today-order-idle { border-top-color: #94a3b8; }
+
+.today-order h3 {
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.today-order p {
+  margin: 0;
+}
+
+.today-order-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.today-tag,
+.today-round {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.today-steps {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #94a3b8;
+}
+
+.today-steps .active {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #121316;
+  color: #ffffff;
+}
+
+.today-steps .done {
+  color: var(--accent-green);
+}
+
+.today-order .today-order-main {
+  font-size: 1.75rem;
+  letter-spacing: -0.03em;
+  line-height: 1.25;
+}
+
+.today-order-main em {
+  font-style: normal;
+}
+
+.today-order-main small {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.today-reason,
+.today-note {
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.today-price-state {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.today-price-state.reached {
+  background: var(--accent-lemon);
+}
+
+.today-waiting {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.today-waiting.warn {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.today-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.today-after {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(18, 19, 22, 0.14);
+}
+
+.today-after-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.today-after-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 760px) {
+  .today-after-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.today-after-grid div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.today-after-grid small {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.today-after-grid strong {
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
+}
+
+.today-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.today-panel-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.today-mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.today-mode-active {
+  background: #121316 !important;
+  color: #ffffff !important;
+}
+
+.today-growth,
+.today-undo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.today-undo {
+  margin-bottom: 12px;
+  background: #f0fdf4;
+}
+
+.today-recent-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.7fr) minmax(0, 1.2fr);
+  gap: 8px;
+  padding: 10px 14px;
+  margin-bottom: 6px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  font-size: 0.82rem;
+}
+
+/* 휴대폰에서는 오늘의 주문을 현황보다 먼저 보여준다 */
+@media (max-width: 760px) {
+  .fintech-main-col {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .today-session {
+    order: -2;
+  }
+
+  #today-order {
+    order: -1;
+  }
+}

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SOXL · TQQQ 올인원 투자 네비게이터</title>
-  <link rel="stylesheet" href="styles.css?v=20261108-14" />
+  <link rel="stylesheet" href="styles.css?v=20261108-15" />
   <!-- TradingView Widget Script -->
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 </head>
@@ -26,11 +26,11 @@
       </div>
 
       <nav class="side-nav">
-        <button type="button" class="nav-item active" id="nav-overview" onclick="switchView('overview')" title="홈 대시보드">
+        <button type="button" class="nav-item active" id="nav-overview" onclick="switchView('overview')" title="오늘의 주문">
           <span class="nav-icon">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5.5v-6h-5v6H4a1 1 0 0 1-1-1v-9.5z"/></svg>
           </span>
-          <span class="nav-label"><strong>홈</strong></span>
+          <span class="nav-label"><strong>오늘</strong></span>
         </button>
 
         <button type="button" class="nav-item" id="nav-chart" onclick="switchView('chart')" title="실시간 차트 & 규칙 기반 타점">
@@ -113,134 +113,32 @@
         <div class="fintech-home-grid">
           <!-- 좌측/중앙 메인 캔버스: 레몬 옐로우 히어로 카드 + 미니 통화형 카드 3종 + 플로팅 리스트 -->
           <div class="fintech-main-col">
-            <div class="fintech-top-split">
-              <!-- (1) 레퍼런스 시그니처: 레몬 옐로우 밸런스 카드 + 하단 3버튼 액션 독 -->
-              <div class="left-stack">
-                <div class="hero-yellow-shell">
-                  <div class="hero-yellow-card">
-                    <div class="hy-top-row">
-                      <span class="hy-currency-tag">USD · 내 현재 평가자산</span>
-                      <span class="hy-eye-icon" onclick="switchView('rescue')" title="원금 탈출 시뮬레이터">↗</span>
-                    </div>
-                    <div class="hy-sub-rate">
-                      회복 원금 <strong id="total-principal">-</strong> (<span id="total-principal-krw">-</span>)
-                    </div>
-                    <div class="hy-big-balance" id="current-eval">-</div>
-                    <div class="hy-change-text" id="current-loss-rate">-</div>
-                  </div>
+            <div id="today-session" class="today-session"></div>
 
-                  <!-- 레퍼런스 Pay / Transfer / Receive 3분할 액션 바 -->
-                  <div class="hy-action-dock">
-                    <button type="button" class="hy-dock-btn" onclick="switchView('rescue')">
-                      <span class="hy-dock-icon">🛠️</span>
-                      <span>탈출 시뮬</span>
-                    </button>
-                    <button type="button" class="hy-dock-btn" onclick="switchView('chart')">
-                      <span class="hy-dock-icon">📈</span>
-                      <span>차트·타점</span>
-                    </button>
-                    <button type="button" class="hy-dock-btn" onclick="switchView('journal')">
-                      <span class="hy-dock-icon">📓</span>
-                      <span>매매 기록</span>
-                    </button>
-                  </div>
-                </div>
-
-                <!-- (2) 레퍼런스 Euro / Pound / Franc 스타일 세로형 미니 KPI 카드 3종 -->
-                <div class="mini-currency-grid">
-                  <div class="mini-curr-card">
-                    <div class="mc-icon mint">🎯</div>
-                    <div class="mc-body">
-                      <span class="mc-label">본전 탈출 주가</span>
-                      <strong class="mc-val" id="breakeven-price">-</strong>
-                      <small class="mc-sub" id="needed-rise-rate">-</small>
-                    </div>
-                  </div>
-
-                  <div class="mini-curr-card">
-                    <div class="mc-icon sky">🔴</div>
-                    <div class="mc-body">
-                      <span class="mc-label">1차 추천 매도가</span>
-                      <strong class="mc-val" id="top-sell-target">$50.10</strong>
-                      <small class="mc-sub">반등시 15~20% 매도</small>
-                    </div>
-                  </div>
-
-                  <div class="mini-curr-card dark-cta-card" onclick="switchView('growth')">
-                    <div class="mc-icon dark">＋</div>
-                    <div class="mc-body">
-                      <span class="mc-label">40분할 복리</span>
-                      <strong class="mc-val">수익 모드</strong>
-                      <small class="mc-sub">무한매수법 ➔</small>
-                    </div>
-                  </div>
-                </div>
+            <div class="today-position">
+              <div class="today-position-item">
+                <small>보유 주식</small>
+                <strong id="today-shares">-</strong>
               </div>
-
-              <!-- (3) 레퍼런스 Recent Transactions 스타일: 플로팅 화이트 필(Pill) 리스트 & 신호등 -->
-              <div class="right-transactions-col">
-                <div class="section-row-head">
-                  <h3>Today's Signal & Missions</h3>
-                  <button type="button" class="text-link-btn" onclick="switchView('chart')">View Chart ➔</button>
-                </div>
-
-                <!-- 호흡 선택 캡슐 -->
-                <div class="strategy-mode-bar compact-pill-bar">
-                  <div class="mode-btns">
-                    <button type="button" class="mode-btn mode-short-btn" onclick="setTargetMode('SHORT')">⚡ 짧은 회전 (+4.5%)</button>
-                    <button type="button" class="mode-btn mode-mid-btn active" onclick="setTargetMode('MID')">⚖️ 표준 반등 (+9%)</button>
-                    <button type="button" class="mode-btn mode-high-btn" onclick="setTargetMode('HIGH')">🚀 강한 반등 (+15%)</button>
-                  </div>
-                </div>
-
-                <!-- 플로팅 화이트 카드 1: 현재 타이밍 신호등 -->
-                <div id="signal-result-box" class="signal-box neutral">
-                  <div class="traffic-lights">
-                    <div class="light red" id="light-sell">🔴 반등 매도</div>
-                    <div class="light yellow active" id="light-wait">🟡 관망·대기</div>
-                    <div class="light green" id="light-buy">🟢 저점 매수</div>
-                  </div>
-
-                  <div class="meter-wrap">
-                    <div class="meter-labels">
-                      <span>🟢 과매도</span>
-                      <span id="score-label-text">타이밍 점수: 50점</span>
-                      <span>🔴 과열</span>
-                    </div>
-                    <div class="meter-bar-bg">
-                      <div class="meter-fill" id="timing-meter-fill" style="left: 50%;"></div>
-                    </div>
-                  </div>
-
-                  <div class="signal-content">
-                    <h3 id="signal-title">시세 데이터를 불러와 타점을 계산 중입니다...</h3>
-                    <p id="signal-desc">잠시만 기다려 주시거나 우측 상단의 새로고침 아이콘을 눌러주세요.</p>
-                    <div class="action-recipe" id="signal-action-recipe"></div>
-                  </div>
-                </div>
-
-                <!-- 플로팅 화이트 필 아이템: 1차 저점 재매수 타점 요약 -->
-                <div class="floating-pill-item" onclick="switchView('rescue')">
-                  <div class="fp-left">
-                    <div class="fp-avatar green-av">🟢</div>
-                    <div class="fp-text">
-                      <strong>1차 추천 저점 재매수가</strong>
-                      <span>확보 현금으로 주식 수 늘리기</span>
-                    </div>
-                  </div>
-                  <div class="fp-right green-val" id="top-buy-target">$45.09</div>
-                </div>
-
-                <!-- 플로팅 화이트 필 아이템: 회전 구출 원리 -->
-                <div class="beginner-tip">
-                  <strong>💡 핵심 원리:</strong>
-                  <span id="why-hard-explanation"></span>
-                </div>
+              <div class="today-position-item">
+                <small>구출 현금</small>
+                <strong id="today-cash">-</strong>
+              </div>
+              <div class="today-position-item">
+                <small>본전 주가</small>
+                <strong id="breakeven-price">-</strong>
+                <span id="needed-rise-rate">-</span>
+              </div>
+              <div class="today-position-item">
+                <small>평가자산 · 원금 <span id="total-principal">-</span><span id="total-principal-krw" hidden></span></small>
+                <strong id="current-eval">-</strong>
+                <span id="current-loss-rate">-</span>
               </div>
             </div>
 
-            <!-- 하단 전체폭: 내 실전 매매 기록 기반 맞춤형 다음 작전 브리핑 -->
-            <div id="overview-next-mission-box" class="mission-briefing-card"></div>
+            <div id="today-order"></div>
+            <div id="today-growth" class="today-growth" style="display:none;"></div>
+            <div id="today-recent" class="today-recent"></div>
           </div>
 
           <!-- (4) 우측 순백색 액션 패널 (레퍼런스 이미지 1의 우측 "$2,101.70 / Send" 패널 스타일) -->
@@ -274,27 +172,12 @@
             </div>
 
             <div class="input-stack fwp-keypad-inputs">
-              <div class="input-group">
-                <label for="initial-shares">현재 보유 주식 (주)</label>
-                <input type="number" id="initial-shares" readonly tabindex="-1" class="derived-input" />
-              </div>
-
-              <div class="input-group">
-                <label for="avg-price">실질 탈출 목표가 ($)</label>
-                <input type="number" id="avg-price" readonly tabindex="-1" class="derived-input" />
-              </div>
-
               <div class="input-group highlight-input">
                 <label for="current-price">현재 주가 ($)</label>
                 <input type="number" id="current-price" value="45.97" min="0.01" step="0.01" oninput="recalcAll()" />
               </div>
-
-              <div class="input-group">
-                <label for="reserved-cash">보유 구출 현금 ($)</label>
-                <input type="number" id="reserved-cash" readonly tabindex="-1" class="derived-input" />
-              </div>
             </div>
-            <p class="derived-input-hint">보유 주식·탈출가·현금은 <strong>⚙️ 원금기준</strong>과 <strong>매매 기록장</strong>(매수·매도·입금·인출)에서만 계산됩니다.</p>
+            <p class="derived-input-hint">시세가 안 들어올 때 증권사 앱의 가격을 직접 넣을 수 있습니다. 보유 주식·현금은 체결 기록으로만 계산됩니다.</p>
 
             <!-- PC <-> 모바일 3초 데이터 연동 & 백업 독 -->
             <div class="sync-mini-bar">
@@ -306,10 +189,6 @@
                 <button type="button" class="sync-chip-btn" onclick="setQuoteApiKey()" title="Twelve Data API 키 등록·변경 (이 기기에만 저장)">🔑 시세 키</button>
               </div>
             </div>
-
-            <button type="button" class="fwp-send-btn" onclick="switchView('rescue')">
-              원금 탈출 시뮬레이터 실행 ➔
-            </button>
           </aside>
         </div>
       </section>
@@ -328,6 +207,46 @@
             <button type="button" class="int-btn" id="int-60" onclick="changeChartInterval('60')">1시간봉</button>
             <button type="button" class="int-btn" id="int-15" onclick="changeChartInterval('15')">15분봉</button>
           </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>🚦 지금 시장 위치</h2>
+          </div>
+        <!-- 호흡 선택 캡슐 -->
+        <div class="strategy-mode-bar compact-pill-bar">
+          <div class="mode-btns">
+            <button type="button" class="mode-btn mode-short-btn" onclick="setTargetMode('SHORT')">⚡ 짧은 회전 (+4.5%)</button>
+            <button type="button" class="mode-btn mode-mid-btn active" onclick="setTargetMode('MID')">⚖️ 표준 반등 (+9%)</button>
+            <button type="button" class="mode-btn mode-high-btn" onclick="setTargetMode('HIGH')">🚀 강한 반등 (+15%)</button>
+          </div>
+        </div>
+
+        <!-- 플로팅 화이트 카드 1: 현재 타이밍 신호등 -->
+        <div id="signal-result-box" class="signal-box neutral">
+          <div class="traffic-lights">
+            <div class="light red" id="light-sell">🔴 반등 매도</div>
+            <div class="light yellow active" id="light-wait">🟡 관망·대기</div>
+            <div class="light green" id="light-buy">🟢 저점 매수</div>
+          </div>
+
+          <div class="meter-wrap">
+            <div class="meter-labels">
+              <span>🟢 과매도</span>
+              <span id="score-label-text">타이밍 점수: 50점</span>
+              <span>🔴 과열</span>
+            </div>
+            <div class="meter-bar-bg">
+              <div class="meter-fill" id="timing-meter-fill" style="left: 50%;"></div>
+            </div>
+          </div>
+
+          <div class="signal-content">
+            <h3 id="signal-title">시세 데이터를 불러와 타점을 계산 중입니다...</h3>
+            <p id="signal-desc">잠시만 기다려 주시거나 우측 상단의 새로고침 아이콘을 눌러주세요.</p>
+            <div class="action-recipe" id="signal-action-recipe"></div>
+          </div>
+        </div>
         </div>
 
         <div class="chart-analysis-grid">
@@ -814,7 +733,6 @@
             </div>
           </form>
 
-          <div id="active-sell-alert" class="mission-briefing-card" style="margin-bottom: 18px;"></div>
 
           <div class="table-responsive">
             <table class="log-table">
@@ -892,22 +810,24 @@
     </div>
   </div>
 
-  <script src="js/format.js?v=20261108-14"></script>
-  <script src="js/ledger.js?v=20261108-14"></script>
-  <script src="js/state.js?v=20261108-14"></script>
-  <script src="js/indicators.js?v=20261108-14"></script>
-  <script src="js/quotes.js?v=20261108-14"></script>
-  <script src="js/backtest.js?v=20261108-14"></script>
-  <script src="js/alerts.js?v=20261108-14"></script>
-  <script src="js/analytics.js?v=20261108-14"></script>
-  <script src="js/ui-core.js?v=20261108-14"></script>
-  <script src="js/ui-backup.js?v=20261108-14"></script>
-  <script src="js/ui-growth.js?v=20261108-14"></script>
-  <script src="js/ui-backtest.js?v=20261108-14"></script>
-  <script src="js/ui-rescue.js?v=20261108-14"></script>
-  <script src="js/ui-journal.js?v=20261108-14"></script>
-  <script src="js/ui-analytics.js?v=20261108-14"></script>
-  <script src="js/main.js?v=20261108-14"></script>
+  <script src="js/format.js?v=20261108-15"></script>
+  <script src="js/ledger.js?v=20261108-15"></script>
+  <script src="js/state.js?v=20261108-15"></script>
+  <script src="js/indicators.js?v=20261108-15"></script>
+  <script src="js/quotes.js?v=20261108-15"></script>
+  <script src="js/backtest.js?v=20261108-15"></script>
+  <script src="js/alerts.js?v=20261108-15"></script>
+  <script src="js/analytics.js?v=20261108-15"></script>
+  <script src="js/daily-plan.js?v=20261108-15"></script>
+  <script src="js/ui-core.js?v=20261108-15"></script>
+  <script src="js/ui-backup.js?v=20261108-15"></script>
+  <script src="js/ui-growth.js?v=20261108-15"></script>
+  <script src="js/ui-backtest.js?v=20261108-15"></script>
+  <script src="js/ui-rescue.js?v=20261108-15"></script>
+  <script src="js/ui-journal.js?v=20261108-15"></script>
+  <script src="js/ui-analytics.js?v=20261108-15"></script>
+  <script src="js/ui-today.js?v=20261108-15"></script>
+  <script src="js/main.js?v=20261108-15"></script>
   <div id="alert-toast-area" class="alert-toast-area" aria-live="polite"></div>
 </body>
 </html>

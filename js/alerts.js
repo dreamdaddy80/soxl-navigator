@@ -216,9 +216,10 @@ function addPriceAlert(price, label) {
 function getAlertPresets(t) {
   const principal = getTotalPrincipal(t) || (t.shares * t.avgPrice);
   const breakeven = t.shares > 0 ? Math.max(0, principal - (t.reservedCash || 0)) / t.shares : 0;
+  const plan = t.dailyPlan;
+  const planIsOrder = plan && (plan.stage === 'SELL' || plan.stage === 'REBUY');
   return {
-    sell: { label: '매도 타점', icon: '🔴', price: t.autoSellTarget1 },
-    buy: { label: '재매수 타점', icon: '🟢', price: t.autoBuyTarget1 },
+    plan: { label: planIsOrder && plan.stage === 'REBUY' ? '오늘의 재매수' : '오늘의 매도', icon: planIsOrder && plan.stage === 'REBUY' ? '🟢' : '🔴', price: planIsOrder ? plan.price : 0 },
     breakeven: { label: '본전', icon: '🎯', price: breakeven }
   };
 }
