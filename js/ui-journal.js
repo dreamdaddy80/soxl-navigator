@@ -127,9 +127,10 @@ function renderLogs() {
 
   if (!t.logs || t.logs.length === 0) {
     tbody.innerHTML = `
-      <tr>
-        <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 24px;">
-          아직 기록된 구출 작전 내역이 없습니다. 반등 시 일부 매도하거나 재매수했을 때 기록해 보세요!
+      <tr class="table-empty">
+        <td colspan="8">
+          <p>아직 기록이 없습니다. 반등에 일부 매도하거나 재매수했을 때 기록해 보세요.</p>
+          <button type="button" class="btn-secondary" onclick="fillFromSimulator()">탈출 시뮬레이터 값 가져오기</button>
         </td>
       </tr>
     `;
@@ -141,13 +142,13 @@ function renderLogs() {
     const isSell = item.type === 'SELL';
     const isCash = isCashLogType(item.type);
     const badge = {
-      SELL: `<span style="color: var(--accent-red); font-weight: 700;">🔴 일부 매도</span>`,
-      BUY: `<span style="color: var(--accent-green); font-weight: 700;">🟢 저점 재매수</span>`,
-      DEPOSIT: `<span style="color: var(--accent-blue); font-weight: 700;">💵 외부 자금 입금</span>`,
-      WITHDRAW: `<span style="color: #b45309; font-weight: 700;">🏧 구출 현금 인출</span>`
+      SELL: `<span class="is-sell">일부 매도</span>`,
+      BUY: `<span class="is-buy">저점 재매수</span>`,
+      DEPOSIT: `<span class="is-info">외부 자금 입금</span>`,
+      WITHDRAW: `<span class="is-warn">구출 현금 인출</span>`
     }[item.type];
     const typeOptions = [
-      ['SELL', '🔴 일부 매도'], ['BUY', '🟢 저점 재매수'], ['DEPOSIT', '💵 외부 자금 입금'], ['WITHDRAW', '🏧 구출 현금 인출']
+      ['SELL', '일부 매도'], ['BUY', '저점 재매수'], ['DEPOSIT', '외부 자금 입금'], ['WITHDRAW', '구출 현금 인출']
     ].map(([v, label]) => `<option value="${v}" ${item.type === v ? 'selected' : ''}>${label}</option>`).join('');
 
     const rebuyGuide = isSell
@@ -167,7 +168,7 @@ function renderLogs() {
         <td><input type="text" id="edit-log-memo-${item.id}" class="inline-edit-input" value="${escapeHTML(item.memo)}" /></td>
         <td>
           <div class="action-btn-group">
-            <button type="button" class="btn-save-inline" onclick="saveEditLog(${item.id})">💾 저장</button>
+            <button type="button" class="btn-save-inline" onclick="saveEditLog(${item.id})">저장</button>
             <button type="button" class="btn-cancel-inline" onclick="cancelEditLog()">취소</button>
           </div>
         </td>
@@ -183,7 +184,7 @@ function renderLogs() {
         <td>${escapeHTML(item.memo) || '-'}</td>
         <td>
           <div class="action-btn-group">
-            <button type="button" class="btn-edit" onclick="startEditLog(${item.id})">✏️ 수정</button>
+            <button type="button" class="btn-edit" onclick="startEditLog(${item.id})">수정</button>
             <button type="button" class="btn-delete" onclick="deleteLog(${item.id})">삭제</button>
           </div>
         </td>

@@ -218,9 +218,9 @@ function getAlertPresets(t) {
   const breakeven = t.shares > 0 ? Math.max(0, principal - (t.reservedCash || 0)) / t.shares : 0;
   const presets = {};
   planOrders(t.dailyPlan).forEach(order => {
-    presets[order.kind] = { label: order.kind === 'SELL' ? '오늘의 매도' : '오늘의 매수', icon: order.kind === 'SELL' ? '🔴' : '🟢', price: order.price };
+    presets[order.kind] = { label: order.kind === 'SELL' ? '오늘의 매도' : '오늘의 매수', price: order.price };
   });
-  presets.breakeven = { label: '본전', icon: '🎯', price: breakeven };
+  presets.breakeven = { label: '본전', price: breakeven };
   return presets;
 }
 
@@ -253,7 +253,7 @@ function renderAlertChannelStatus() {
   const otherActive = Object.keys(appState.tickers)
     .filter(sym => sym !== appState.currentTicker)
     .reduce((sum, sym) => sum + appState.tickers[sym].alerts.filter(a => a.active).length, 0);
-  el.innerHTML = `🖥️ 브라우저 알림: <strong>${permissionText}</strong> · ✈️ 텔레그램: <strong>${getTelegramConfig() ? '연결됨' : '미연결'}</strong>` +
+  el.innerHTML = `브라우저 알림: <strong>${permissionText}</strong> · 텔레그램: <strong>${getTelegramConfig() ? '연결됨' : '미연결'}</strong>` +
     (telegramLastError ? ` <span class="alert-error">(마지막 전송 실패: ${escapeHTML(telegramLastError)})</span>` : '') +
     (otherActive ? ` · 다른 종목에 걸린 알림 ${otherActive}개` : '');
 }
@@ -272,7 +272,7 @@ function renderPriceAlerts() {
   const presets = getAlertPresets(t);
   document.getElementById('alert-presets').innerHTML = Object.entries(presets)
     .filter(([, p]) => p.price > 0)
-    .map(([kind, p]) => `<button type="button" class="sync-chip-btn" onclick="addPresetAlert('${kind}')">${p.icon} ${p.label} ${formatUSD(p.price)}</button>`)
+    .map(([kind, p]) => `<button type="button" class="sync-chip-btn" onclick="addPresetAlert('${kind}')">${p.label} ${formatUSD(p.price)}</button>`)
     .join('');
 
   if (t.alerts.length === 0) {
@@ -290,7 +290,7 @@ function renderPriceAlerts() {
     </div>`;
   listEl.innerHTML = [
     ...active.map(a => row(a, cur > 0 ? `현재가에서 ${formatBtSignedPct(a.price / cur - 1)}` : '대기 중')),
-    ...done.map(a => row(a, `🔔 ${formatAlertTime(a.triggeredAt)} 도달 (${formatUSD(a.triggeredPrice)})`))
+    ...done.map(a => row(a, `${formatAlertTime(a.triggeredAt)} 도달 (${formatUSD(a.triggeredPrice)})`))
   ].join('');
 }
 

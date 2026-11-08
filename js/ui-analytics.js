@@ -12,7 +12,7 @@ function renderRotationAnalytics(t, cur) {
     const moved = w.netSellPrice > 0 ? cur / w.netSellPrice - 1 : 0;
     return `
       <div class="bt-verdict ${moved > 0 ? 'bt-verdict-bad' : 'bt-verdict-flat'}">
-        ⏳ ${w.sellDate} 매도분 <strong>${formatUSD(w.proceeds)}</strong>이 ${w.daysWaited}일째 재매수를 기다리고 있습니다.
+        ${w.sellDate} 매도분 <strong>${formatUSD(w.proceeds)}</strong>이 ${w.daysWaited}일째 재매수를 기다리고 있습니다.
         현재가는 매도 단가보다 ${formatBtSignedPct(moved)}이고, 지금 되사면 ${rebuyShares.toLocaleString()}주(판 수량 대비 ${formatShareDelta(rebuyShares - w.sellShares)})입니다.
       </div>`;
   })() : '';
@@ -24,7 +24,7 @@ function renderRotationAnalytics(t, cur) {
       <td>${formatUSD(r.netSellPrice)}</td>
       <td>${r.netBuyPrice == null ? '-' : formatUSD(r.netBuyPrice)}</td>
       <td>${r.status === 'waiting' ? '-' : `${r.shareChange >= 0 ? '+' : ''}${Number(r.shareChange.toFixed(2))}주`}</td>
-      <td class="${r.effectNow >= 0 ? 'bt-best' : 'analytics-negative'}">${formatSignedUSD(r.effectNow)}</td>
+      <td class="${r.effectNow >= 0 ? 'is-up' : 'is-down'}">${formatSignedUSD(r.effectNow)}</td>
     </tr>`).join('');
 
   return `
@@ -53,8 +53,8 @@ function renderRotationAnalytics(t, cur) {
           <tr>
             <th>매도일</th>
             <th>대기</th>
-            <th>순매도 단가</th>
-            <th>순매수 단가</th>
+            <th class="col-opt">순매도 단가</th>
+            <th class="col-opt">순매수 단가</th>
             <th>주식 수 변화</th>
             <th>안 했을 때 대비 (현재가 기준)</th>
           </tr>
@@ -99,12 +99,10 @@ function renderJournalAnalytics() {
   if (!box) return;
   const ticker = appState.currentTicker;
   const t = appState.tickers[ticker];
-  document.getElementById('journal-analytics-title').textContent = `📊 내 매매 성적표 (${ticker})`;
+  document.getElementById('journal-analytics-title').textContent = `내 매매 성적표 (${ticker})`;
   box.innerHTML = `
-    <h4 class="analytics-heading">🛠️ 원금 탈출</h4>
-    ${renderRotationAnalytics(t, t.currentPrice)}
-    <h4 class="analytics-heading">🌱 40분할</h4>
-    ${renderGrowthAnalytics(t)}
+    <div class="seg-only-rescue">${renderRotationAnalytics(t, t.currentPrice)}</div>
+    <div class="seg-only-growth">${renderGrowthAnalytics(t)}</div>
     <div class="bt-notes"><div>기록장의 체결 내역만으로 계산합니다. 금액은 입력한 체결가와 편도 수수료 0.1% 기준이며 세금은 반영하지 않았습니다.</div></div>
   `;
 }

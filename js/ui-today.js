@@ -4,8 +4,8 @@ let todayPanel = null; // { type: 'fill' | 'adjust', kind }: 입력 중에는 �
 let lastTodayFill = null;
 
 const TODAY_STAGE_INFO = {
-  SELL: { icon: '🔴', verb: '매도', tone: 'today-order-sell', step: 1 },
-  REBUY: { icon: '🟢', verb: '재매수', tone: 'today-order-buy', step: 2 }
+  SELL: { verb: '매도', tone: 'today-order-sell', step: 1 },
+  REBUY: { verb: '재매수', tone: 'today-order-buy', step: 2 }
 };
 
 function orderVerb(plan, kind) {
@@ -33,19 +33,24 @@ function renderTodaySession(session) {
   const steps = [
     ['PRE', '프리장', b.PRE, b.REGULAR],
     ['REGULAR', '본장', b.REGULAR, b.AFTER],
-    ['AFTER', '애프터장', b.AFTER, b.END]
+    ['AFTER', '애프터', b.AFTER, b.END]
   ];
+  const now = Date.now();
   box.innerHTML = `
-    <div class="today-session-steps">
-      ${steps.map(([key, label, from, to]) => `
-        <div class="today-session-step ${session.key === key ? 'active' : ''}">
-          <strong>${label}</strong>
-          <span>${formatSeoulTime(from)}~${formatSeoulTime(to)}</span>
-        </div>`).join('')}
+    <div class="session-bar">
+      ${steps.map(([key, label, from, to]) => {
+        const active = session.key === key;
+        const done = active ? Math.min(100, Math.max(0, ((now - from) / (to - from)) * 100)) : 0;
+        return `
+        <div class="session-seg ${active ? 'active' : ''}" style="flex-grow:${(to - from) / 3600000}">
+          <i class="session-fill" style="width:${done.toFixed(1)}%"></i>
+          <span class="session-name">${label}<span class="session-time"> ${formatSeoulTime(from)}~${formatSeoulTime(to)}</span></span>
+        </div>`;
+      }).join('')}
     </div>
-    <div class="today-session-now">
-      <strong>${session.holiday ? '오늘은 미국 시장 휴장일입니다' : `지금은 ${session.label}`}</strong>
-      <span>${session.next.label}까지 ${formatRemaining(session.next.at)} · 시각은 한국시간</span>
+    <div class="session-now">
+      <strong>${session.holiday ? '오늘은 미국 시장 휴장일' : `지금은 ${session.label}`}</strong>
+      <span>${session.next.label}까지 ${formatRemaining(session.next.at)} · 한국시간</span>
     </div>
   `;
 }
@@ -74,11 +79,11 @@ function todayPriceState(t, plan, order, session) {
   const touchedLow = barIsToday && t.dayLow > 0 && t.dayLow <= order.price && (!plan.lowAtCreate || t.dayLow < plan.lowAtCreate);
   const distance = formatBtSignedPct(order.price / cur - 1);
   if (order.kind === 'SELL') {
-    if (cur >= order.price) return { cls: 'reached', text: `⚡ 현재가 ${formatUSD(cur)}가 주문가 이상입니다. 지정가를 걸면 바로 체결될 수 있습니다.` };
+    if (cur >= order.price) return { cls: 'reached', text: `현재가 ${formatUSD(cur)}가 주문가 이상입니다. 지정가를 걸면 바로 체결될 수 있습니다.` };
     if (touchedHigh) return { cls: 'reached', text: `오늘 고가 ${formatUSD(t.dayHigh)}가 주문가에 닿았습니다. 증권사 앱에서 체결됐는지 확인해 보세요.` };
     return { cls: '', text: `현재가 ${formatUSD(cur)} · 주문가까지 ${distance}` };
   }
-  if (cur <= order.price) return { cls: 'reached', text: `⚡ 현재가 ${formatUSD(cur)}가 주문가 이하입니다. 지정가를 걸면 바로 체결될 수 있습니다.` };
+  if (cur <= order.price) return { cls: 'reached', text: `현재가 ${formatUSD(cur)}가 주문가 이하입니다. 지정가를 걸면 바로 체결될 수 있습니다.` };
   if (touchedLow) return { cls: 'reached', text: `오늘 저가 ${formatUSD(t.dayLow)}가 주문가에 닿았습니다. 증권사 앱에서 체결됐는지 확인해 보세요.` };
   return { cls: '', text: `현재가 ${formatUSD(cur)} · 주문가까지 ${distance}` };
 }
@@ -95,7 +100,7 @@ function renderRebuyWaitingNote(t) {
   const overLimit = open.daysWaited >= 28; // 약 20거래일
   return `
     <div class="today-waiting ${overLimit || cur > sellPrice ? 'warn' : ''}">
-      ⏳ ${open.sellDate} 매도 후 <strong>${open.daysWaited}일째</strong> 대기 중 · 지금 시세로 되사면 ${rebuyNow.toLocaleString()}주 (판 수량 대비 ${formatShareDelta(delta)})
+      ${open.sellDate} 매도 후 <strong>${open.daysWaited}일째</strong> 대기 중 · 지금 시세로 되사면 ${rebuyNow.toLocaleString()}주 (판 수량 대비 ${formatShareDelta(delta)})
       ${overLimit || cur > sellPrice ? '<br/>과거 검증에서 회전이 보유보다 뒤처진 주된 이유가 재매수를 기다리다 현금이 묶이는 경우였습니다. 계속 기다릴지, 주문가를 바꿀지 정해 보세요.' : ''}
     </div>`;
 }
@@ -117,17 +122,9 @@ function renderTodayFillPanel(plan, order) {
 }
 
 function renderTodayAdjustPanel(plan, order) {
-  const mode = appState.targetMode || 'MID';
-  const modeButtons = plan.stage !== 'SELL' ? '' : `
-    <div class="today-mode-row">
-      <span>반등 기준</span>
-      ${[['SHORT', '⚡ 짧게 +4.5%'], ['MID', '⚖️ 표준 +9%'], ['HIGH', '🚀 강하게 +15%']]
-        .map(([key, label]) => `<button type="button" class="sync-chip-btn ${mode === key ? 'today-mode-active' : ''}" onclick="setTodayMode('${key}')">${label}</button>`).join('')}
-    </div>`;
   return `
     <div class="today-panel">
       <strong>${orderVerb(plan, order.kind)} 주문 조정</strong>
-      ${modeButtons}
       <div class="today-panel-fields">
         <div class="input-group"><label for="today-adjust-price">주문가 ($)</label><input type="number" id="today-adjust-price" step="0.01" min="0.01" value="${order.price}" /></div>
         <div class="input-group"><label for="today-adjust-shares">수량 (주)</label><input type="number" id="today-adjust-shares" step="1" min="1" value="${order.shares}" /></div>
@@ -139,7 +136,18 @@ function renderTodayAdjustPanel(plan, order) {
     </div>`;
 }
 
-function renderTodayOrderRow(t, plan, order, session) {
+// 체결되면 본전이 얼마나 왜 바뀌는지 한 줄로 설명한다
+function breakevenChangeNote(t, order, after) {
+  const delta = after.breakeven - rescueBreakeven(t);
+  if (Math.abs(delta) < 0.005) return '';
+  const rises = delta > 0;
+  const reason = order.kind === 'SELL'
+    ? (rises ? '손실 구간 매도로 남은 주식의 본전이 올라감' : '본전 위 매도로 남은 주식의 본전이 내려감')
+    : (rises ? '본전보다 비싸게 사서 본전이 올라감' : '본전보다 싸게 사서 본전이 내려감');
+  return `<p class="today-after-delta ${rises ? 'is-warn' : 'is-info'}">본전 ${rises ? '+' : '-'}${formatUSD(Math.abs(delta))} ${rises ? '↑' : '↓'} (${reason})</p>`;
+}
+
+function renderTodayOrderRow(t, plan, order, session, isMain) {
   const info = TODAY_STAGE_INFO[order.kind];
   const state = todayPriceState(t, plan, order, session);
   const after = previewPlanFill(t, plan, order);
@@ -148,15 +156,15 @@ function renderTodayOrderRow(t, plan, order, session) {
 
   return `
     <div class="today-order-row">
-      <h3 class="today-order-main">${info.icon} ${order.shares.toLocaleString()}주 ${orderVerb(plan, order.kind)} <em>@ ${formatUSD(order.price)}</em> <small>지정가</small></h3>
+      <h3 class="today-order-main"><span class="${order.kind === 'SELL' ? 'is-sell' : 'is-buy'}">${order.shares.toLocaleString()}주 ${orderVerb(plan, order.kind)}</span> <em>@ ${formatUSD(order.price)}</em> <small>지정가</small></h3>
       ${plan.stage === 'VR' ? '' : `<p class="today-reason">${escapeHTML(plan.reason || '직접 정한 주문가')}</p>`}
       <div class="today-price-state ${state.cls}">${state.text}</div>
       ${plan.stage === 'REBUY' ? renderRebuyWaitingNote(t) : ''}
       ${panelHTML || `
       <div class="today-actions">
-        <button type="button" class="btn-primary" onclick="openTodayPanel('fill', '${order.kind}')">✅ 체결됐어요</button>
-        <button type="button" class="btn-secondary" onclick="openTodayPanel('adjust', '${order.kind}')">✏️ 조정</button>
-        <button type="button" class="btn-secondary" onclick="addTodayAlert('${order.kind}')">🔔 도달 알림</button>
+        <button type="button" class="${isMain ? 'btn-primary' : 'btn-secondary'} today-fill-btn" onclick="openTodayPanel('fill', '${order.kind}')">✅ 체결됐어요</button>
+        <button type="button" class="btn-secondary" onclick="openTodayPanel('adjust', '${order.kind}')">조정</button>
+        <button type="button" class="btn-secondary" onclick="addTodayAlert('${order.kind}')">도달 알림</button>
       </div>`}
       <div class="today-after">
         <span class="today-after-title">체결되면</span>
@@ -166,33 +174,22 @@ function renderTodayOrderRow(t, plan, order, session) {
           <div><small>본전 주가</small><strong>${formatUSD(after.breakeven)}</strong></div>
           <div><small>다음 제안</small><strong>${after.nextText}</strong></div>
         </div>
+        ${breakevenChangeNote(t, order, after)}
       </div>
     </div>`;
-}
-
-function renderTodayRuleRow(t) {
-  return isVrRule(t)
-    ? `<div class="today-rule-row">
-        <span>주문 규칙: <strong>VR</strong></span>
-        <button type="button" class="text-link-btn" onclick="resetVrBase()">V를 지금 평가금으로 다시 잡기</button>
-        <button type="button" class="text-link-btn" onclick="setPlanRule('ROTATION')">회전 규칙으로 바꾸기</button>
-      </div>`
-    : `<div class="today-rule-row">
-        <span>주문 규칙: <strong>반등 회전</strong></span>
-        <button type="button" class="text-link-btn" onclick="setPlanRule('VR')">VR 규칙으로 바꾸기</button>
-      </div>`;
 }
 
 function renderTodayOrder(t, session) {
   const box = document.getElementById('today-order');
   if (!box) return;
   const plan = ensureDailyPlan(t);
+  const detailsWasOpen = Boolean(box.querySelector?.('.today-more')?.open);
 
   if (!plan) {
     box.innerHTML = `
       <div class="today-order today-order-idle">
         <h3>시세를 확인하는 중입니다</h3>
-        <p>오늘의 주문은 최신 시세로 한 번 정합니다. 계속 이 문구가 보이면 🔑 시세 키를 확인하거나, 증권사 앱의 가격을 '현재 주가' 칸에 입력해 주세요.</p>
+        <p>오늘의 주문은 최신 시세로 한 번 정합니다. 계속 이 문구가 보이면 <button type="button" class="text-link-btn" onclick="openManualPrice()">시세가 안 들어오나요?</button></p>
       </div>`;
     return;
   }
@@ -200,7 +197,7 @@ function renderTodayOrder(t, session) {
     box.innerHTML = `
       <div class="today-order today-order-idle">
         <h3>보유 주식이 없습니다</h3>
-        <p>⚙️ 원금기준에서 보유 수량과 평단을 입력하거나 기록장에 매수를 기록해 주세요.</p>
+        <p><button type="button" class="text-link-btn" onclick="openSettings('settings-account')">설정의 원금 기준</button>에서 보유 수량과 평단을 입력하거나 기록장에 매수를 기록해 주세요.</p>
       </div>`;
     return;
   }
@@ -208,9 +205,9 @@ function renderTodayOrder(t, session) {
     box.innerHTML = `
       <div class="today-order today-order-done">
         <span class="today-tag">오늘의 판단</span>
-        <h3>🎉 현재가가 본전(${formatUSD(plan.price)}) 이상입니다</h3>
-        <p>회전 주문을 내지 않습니다. 이제 계속 보유할지, 일부 현금화할지 결정할 차례입니다.</p>
-        <div class="today-actions"><button type="button" class="btn-secondary" onclick="switchView('growth')">🌱 40분할 실제 성적 보기</button></div>
+        <h3>현재가가 본전(${formatUSD(plan.price)}) 이상입니다</h3>
+        <p>회전 주문을 내지 않습니다. 계속 보유할지, 일부 현금화할지 결정할 차례입니다.</p>
+        <div class="today-actions-inline"><button type="button" class="btn-secondary" onclick="switchView('growth')">40분할 실제 성적 보기</button></div>
       </div>`;
     return;
   }
@@ -218,21 +215,19 @@ function renderTodayOrder(t, session) {
   const orders = planOrders(plan);
   const isVr = plan.stage === 'VR';
   const headRight = isVr
-    ? 'VR'
+    ? termHTML('VR 규칙', 'VR')
     : `${analyzeRotations(t, t.currentPrice, todayISO()).finishedCount + 1}회차`;
-  const statusHTML = isVr
-    ? `<div class="today-vr-status">
-        기준 평가금 V <strong>${formatUSD(t.vrValue)}</strong> · 지금 평가금 ${formatUSD(t.shares * t.currentPrice)}.
-        V의 ±15%를 벗어나는 가격에만 주문합니다. 다음 V 갱신 ${escapeHTML(t.vrNextUpdate)}.
-        ${plan.buyShares > 0 ? '' : '<br/>현금이 없어 매수 주문은 없습니다. 매도가 체결되면 생깁니다.'}
-      </div>`
-    : `<div class="today-steps">
+  const stepsHTML = isVr ? '' : `
+      <div class="today-steps">
         <span class="${plan.stage === 'SELL' ? 'active' : 'done'}">① 반등 매도</span>
         <span class="today-steps-arrow">→</span>
         <span class="${plan.stage === 'REBUY' ? 'active' : ''}">② 눌림목 재매수</span>
         <span class="today-steps-arrow">→</span>
         <span>다음 회차</span>
       </div>`;
+  const vrStatusHTML = !isVr ? '' : `
+      <p>기준 평가금 V <strong>${formatUSD(t.vrValue)}</strong> · 지금 평가금 ${formatUSD(t.shares * t.currentPrice)}. V의 ±15%를 벗어나는 가격에만 주문합니다. 다음 V 갱신 ${escapeHTML(t.vrNextUpdate)}.</p>
+      ${plan.buyShares > 0 ? '' : '<p>현금이 없어 매수 주문은 없습니다. 매도가 체결되면 생깁니다.</p>'}`;
   const ruleNote = isVr
     ? '과거 검증에서 기존 회전 규칙보다는 나았지만, TQQQ에서는 그냥 보유보다 뒤처졌고 큰 낙폭은 막지 못했습니다.'
     : '이 규칙은 과거에 그냥 보유보다 대체로 뒤처졌습니다.';
@@ -243,11 +238,14 @@ function renderTodayOrder(t, session) {
         <span class="today-tag">오늘의 주문 · ${plan.tradeDay} 거래일${plan.custom ? ' · 직접 조정' : ''}</span>
         <span class="today-round">${headRight}</span>
       </div>
-      ${statusHTML}
-      ${orders.map(order => renderTodayOrderRow(t, plan, order, session)).join('')}
-      <p class="today-note">${todaySessionHint(session)} 오늘 체결되지 않으면 기록할 것이 없고, 다음 거래일에 새 주문을 제안합니다.</p>
-      <p class="today-note">규칙이 계산한 참고 주문이며 실행 여부는 본인 판단입니다. ${ruleNote} <button type="button" class="text-link-btn" onclick="switchView('rescue')">시나리오·과거 검증 보기 ➔</button></p>
-      ${renderTodayRuleRow(t)}
+      ${stepsHTML}
+      ${orders.map((order, i) => renderTodayOrderRow(t, plan, order, session, i === 0)).join('')}
+      <p class="today-note">규칙이 계산한 참고 주문이며 실행 여부는 본인 판단입니다. ${ruleNote} <button type="button" class="text-link-btn" onclick="switchView('rescue')">시나리오·과거 검증 보기</button></p>
+      <details class="today-more" ${detailsWasOpen ? 'open' : ''}>
+        <summary>주문 방법${isVr ? '과 V 기준' : ''} 자세히</summary>
+        ${vrStatusHTML}
+        <p>${todaySessionHint(session)} 오늘 체결되지 않으면 기록할 것이 없고, 다음 거래일에 새 주문을 제안합니다.</p>
+      </details>
     </div>`;
 }
 
@@ -256,10 +254,15 @@ function renderTodayRecent(t) {
   if (!box) return;
   const undoHTML = lastTodayFill && lastTodayFill.ticker === appState.currentTicker ? `
     <div class="today-undo">
-      <span>✅ ${escapeHTML(lastTodayFill.text)} 기록 완료</span>
+      <span>${escapeHTML(lastTodayFill.text)} 기록 완료</span>
       <button type="button" class="text-link-btn" onclick="undoTodayFill()">되돌리기</button>
     </div>` : '';
-  const labels = { SELL: '🔴 매도', BUY: '🟢 매수', DEPOSIT: '💵 입금', WITHDRAW: '🏧 인출' };
+  const labels = {
+    SELL: '<span class="is-sell">매도</span>',
+    BUY: '<span class="is-buy">매수</span>',
+    DEPOSIT: '입금',
+    WITHDRAW: '인출'
+  };
   const rows = (t.logs || []).slice(0, 3).map(item => {
     const isCash = isCashLogType(item.type);
     return `
@@ -273,9 +276,9 @@ function renderTodayRecent(t) {
     ${undoHTML}
     <div class="section-row-head">
       <h3>최근 체결</h3>
-      <button type="button" class="text-link-btn" onclick="switchView('journal')">기록장 전체 ➔</button>
+      <button type="button" class="text-link-btn" onclick="switchView('journal')">기록장 전체</button>
     </div>
-    ${rows || '<div class="today-note">아직 기록이 없습니다. 주문이 체결되면 위의 ✅ 체결됐어요를 눌러 주세요.</div>'}
+    ${rows || '<div class="today-note">아직 기록이 없습니다. 주문이 체결되면 체결됐어요를 눌러 주세요.</div>'}
   `;
 }
 
@@ -290,34 +293,78 @@ function renderTodayGrowthRow(t) {
   box.style.display = '';
   const target = g.heldShares > 0 ? g.avgPrice * (1 + g.targetProfitPct / 100) : 0;
   box.innerHTML = `
-    <span>🌱 40분할 ${g.cycleCount}사이클 · ${g.heldShares > 0 ? `${g.heldShares}주 · 졸업 목표 ${formatUSD(target)}` : '첫 매수 대기'}</span>
-    <button type="button" class="text-link-btn" onclick="switchView('growth')">오늘 주문표 ➔</button>
+    <span>40분할 ${g.cycleCount}사이클 · ${g.heldShares > 0 ? `${g.heldShares}주 · 졸업 목표 ${formatUSD(target)}` : '첫 매수 대기'}</span>
+    <button type="button" class="text-link-btn" onclick="switchView('growth')">오늘 주문표</button>
   `;
 }
 
-// 오늘의 주문이 VR일 때, 회전 규칙으로 계산하는 화면에 다른 규칙임을 알린다
+// 오늘의 주문이 VR일 때, 회전 규칙으로 계산하는 화면에 다른 규칙임을 알린다 (배지와 같은 용어를 쓴다)
 function renderRuleNotices(t) {
   const notices = {
-    'rescue-rule-notice': '이 화면은 <strong>반등 회전 규칙</strong>을 비교해 보는 계산기입니다. 실제 오늘의 주문은 <strong>VR 규칙</strong>을 따르므로 매도 수량과 가격이 다릅니다.',
-    'chart-rule-notice': '아래 목표 매도가·재매수가는 <strong>반등 회전 규칙</strong> 기준입니다. 실제 오늘의 주문은 <strong>VR 규칙</strong>을 따르므로 가격이 다릅니다.'
+    'rescue-rule-notice': '이 화면은 <strong>반등 회전</strong> 규칙을 비교해 보는 계산기입니다. 현재 규칙은 <strong>VR 규칙</strong>이라 실제 주문의 수량과 가격이 다릅니다.',
+    'chart-rule-notice': '아래 목표가는 <strong>반등 회전</strong> 규칙 기준입니다. 현재 규칙은 <strong>VR 규칙</strong>이라 실제 주문 가격이 다릅니다.'
   };
   Object.entries(notices).forEach(([id, text]) => {
     const el = document.getElementById(id);
     if (!el) return;
     el.style.display = isVrRule(t) ? '' : 'none';
-    el.innerHTML = `<span>${text}</span><button type="button" class="text-link-btn" onclick="switchView('overview')">오늘의 주문 ➔</button>`;
+    el.innerHTML = `<span>${text}</span><button type="button" class="text-link-btn" onclick="switchView('overview')">오늘의 주문</button>`;
   });
+}
+
+function todayTodoText(t) {
+  const plan = t.dailyPlan;
+  if (!plan) return '시세 확인 중';
+  if (plan.stage === 'EMPTY') return '보유 주식 없음';
+  if (plan.stage === 'DONE') return '본전 이상 · 규칙 주문 없음';
+  return planOrders(plan)
+    .map(o => `<span class="${o.kind === 'SELL' ? 'is-sell' : 'is-buy'}">${orderVerb(plan, o.kind)}</span> ${o.shares.toLocaleString()}주 @ ${formatUSD(o.price)}`)
+    .join(' · ');
+}
+
+// 오늘 탭 밖에서도 오늘 할 일과 현재 손익이 첫 화면에 보이게 한다
+function renderStatusStrip(t) {
+  const el = document.getElementById('global-status');
+  if (!el) return;
+  const principal = getTotalPrincipal(t) || (t.shares * t.avgPrice);
+  const diff = t.shares * t.currentPrice + (t.reservedCash || 0) - principal;
+  const pct = principal > 0 ? (diff / principal) * 100 : 0;
+  el.innerHTML = `
+    <span class="ss-item ss-todo"><small>오늘 할 일</small><strong>${todayTodoText(t)}</strong></span>
+    <span class="ss-item ss-pnl"><small>평가손익</small><strong class="${diff >= 0 ? 'is-up' : 'is-down'}">${formatSignedUSD(diff)} (${diff >= 0 ? '+' : ''}${pct.toFixed(1)}%)</strong></span>
+  `;
+}
+
+function renderTodayAlerts(t) {
+  const box = document.getElementById('today-alerts');
+  if (!box) return;
+  const active = (t.alerts || []).filter(a => a.active).sort((a, b) => b.price - a.price);
+  const rows = active.slice(0, 3).map(a => `
+    <div class="today-alert-row">
+      <span>${a.direction === 'above' ? '▲' : '▼'} <strong>${formatUSD(a.price)}</strong></span>
+      <span>${escapeHTML(a.label)}</span>
+    </div>`).join('');
+  box.innerHTML = `
+    <div class="section-row-head">
+      <h3>가격 알림</h3>
+      <button type="button" class="text-link-btn" onclick="switchView('chart')">${active.length ? `${active.length}개 관리` : '알림 걸기'}</button>
+    </div>
+    ${rows || '<div class="today-note">걸어 둔 알림이 없습니다.</div>'}
+  `;
 }
 
 function renderToday() {
   const t = appState.tickers[appState.currentTicker];
+  renderRuleBadge(t);
   renderRuleNotices(t);
   const session = currentMarketSession();
   renderTodaySession(session);
   renderTodayPosition(t);
   renderTodayRecent(t);
   renderTodayGrowthRow(t);
+  renderTodayAlerts(t);
   if (!todayPanel) renderTodayOrder(t, session);
+  renderStatusStrip(t);
   renderPriceAlerts(); // 알림 버튼은 방금 정한 오늘의 주문 가격을 쓴다
 }
 
@@ -329,11 +376,6 @@ function openTodayPanel(type, kind) {
 function closeTodayPanel() {
   todayPanel = null;
   renderToday();
-}
-
-function setTodayMode(mode) {
-  todayPanel = null;
-  setTargetMode(mode);
 }
 
 function setPlanRule(rule) {

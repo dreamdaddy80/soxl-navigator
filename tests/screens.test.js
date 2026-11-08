@@ -6,6 +6,7 @@ const { bars, baseBars } = syntheticBars();
 
 function setPrices(app, cur = 27.27, sell = 29.72, buy = 26.75) {
   app.run(`appState.tickers.SOXL.currentPrice = ${cur}`);
+  app.run('appState.tickers.SOXL.growth.seedConfirmed = 1');
   app.run(`document.getElementById('sim-sell-price').value = '${sell}'`);
   app.run(`document.getElementById('sim-buy-price').value = '${buy}'`);
   return app;
@@ -74,7 +75,7 @@ test('시나리오: 재매수를 못 하면 본전 주가가 올라간다', () =
   const secured = 20 * 29.72 * 0.999;
   assert.ok(html.includes(`$${((6000 - secured) / 80).toFixed(2)}`));
   assert.ok(html.includes('$60.00'));
-  assert.ok(html.includes('과거 빈도는 아래'));
+  assert.ok(html.includes('과거 빈도는 과거 검증 탭'));
 });
 
 test('시나리오: 일봉이 있으면 과거 빈도를 표시한다', () => {
@@ -85,7 +86,7 @@ test('시나리오: 일봉이 있으면 과거 빈도를 표시한다', () => {
 
 test('복리 시뮬레이터: 공제 후 22%로 양도세를 어림한다', () => {
   const app = boot();
-  app.run('renderGrowthCompoundAndHistory()');
+  app.run('appState.tickers.SOXL.growth.seedConfirmed = 1; renderGrowthCompoundAndHistory()');
   const profit = 10000 * (Math.pow(1.055, 6) - 1);
   const tax = Math.max(0, profit * 1400 - 2500000) * 0.22 / 1400;
   assert.ok(app.els['g-compound-summary'].innerHTML.includes(`양도세 $${tax.toFixed(2)}`));

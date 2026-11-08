@@ -5,6 +5,7 @@ let refreshMinute = 0;
 
 // 초기 실행 및 60초마다 실시간 시세 자동 갱신
 window.addEventListener('DOMContentLoaded', () => {
+  initShell();
   document.getElementById('log-date').value = todayISO();
   document.getElementById('g-input-buy-date').value = todayISO();
   populateInputsFromState();

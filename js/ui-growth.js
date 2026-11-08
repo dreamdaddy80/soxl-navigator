@@ -1,5 +1,53 @@
 // 40분할 화면과 기록 입력
 
+// 40분할 기록이 없고 시드가 샘플 기본값이거나 회복 목표 원금과 같으면 아직 시드를 정하지 않은 것으로 본다.
+// 회복 목표 원금은 이미 주식에 묶인 돈이라 시드로 쓸 수 없다. 저장값은 사용자가 입력할 때까지 그대로 둔다.
+function growthSeedUnset(t) {
+  const g = t.growth;
+  if (g.seedConfirmed || g.heldShares > 0 || (g.history && g.history.length > 0)) return false;
+  const isSample = Object.values(DEFAULT_STATE.tickers).some(d => d.growth.totalBudget === g.totalBudget);
+  return isSample || Math.abs(g.totalBudget - getTotalPrincipal(t)) < 1;
+}
+
+function focusGrowthSeed() {
+  switchView('growth');
+  const input = document.getElementById('g-total-budget');
+  input.scrollIntoView({ block: 'center' });
+  input.focus({ preventScroll: true });
+}
+
+function renderSeedNotice(t, seedUnset, unspentSeed) {
+  const box = document.getElementById('g-seed-notice');
+  const cash = t.reservedCash || 0;
+  if (seedUnset) {
+    const lockedHint = Math.abs(t.growth.totalBudget - getTotalPrincipal(t)) < 1
+      ? ` 이전 값 ${formatUSD(t.growth.totalBudget)}는 ${t.shares.toLocaleString()}주에 이미 묶인 회복 목표 원금이라 비워 두었습니다.`
+      : '';
+    box.className = 'seed-notice is-info';
+    box.textContent = `시드를 입력해 주세요. 지금 가용 현금은 ${formatUSD(cash)}입니다.${lockedHint}`;
+    box.style.display = '';
+  } else if (unspentSeed > cash + 0.005) {
+    box.className = 'seed-notice is-warn';
+    box.textContent = `아직 쓰지 않은 시드 ${formatUSD(unspentSeed)}가 가용 현금 ${formatUSD(cash)}보다 큽니다. 주식에 묶인 돈은 시드로 쓸 수 없습니다. 별도 자금이라면 무시해도 됩니다.`;
+    box.style.display = '';
+  } else {
+    box.style.display = 'none';
+  }
+}
+
+function renderGraduateButton(t, g, targetSellPrice) {
+  const btn = document.getElementById('g-graduate-btn');
+  const hint = document.getElementById('g-graduate-hint');
+  const held = g.heldShares > 0;
+  const reached = held && Math.max(t.currentPrice, t.dayHigh || 0) >= targetSellPrice;
+  btn.disabled = !reached;
+  hint.textContent = !held
+    ? '보유 주식이 없습니다. 매수 후 목표가에 도달하면 활성화됩니다.'
+    : reached
+      ? `목표가 ${formatUSD(targetSellPrice)} 도달. 실제로 전량 체결됐다면 눌러서 기록하세요.`
+      : `목표가 ${formatUSD(targetSellPrice)} 도달 시 활성화 (현재가 ${formatUSD(t.currentPrice)})`;
+}
+
 // 증권사 앱의 실제 보유분과 기록이 다를 때 조정 기록으로 맞춘다
 function setGrowthPosition() {
   const t = appState.tickers[appState.currentTicker];
@@ -44,7 +92,11 @@ function recalcGrowthMode(syncFromDOM = true) {
   const g = t.growth;
 
   if (syncFromDOM) {
-    g.totalBudget = parseFloat(document.getElementById('g-total-budget').value) || g.totalBudget;
+    const typedBudget = parseFloat(document.getElementById('g-total-budget').value);
+    if (typedBudget > 0) {
+      g.totalBudget = typedBudget;
+      g.seedConfirmed = 1;
+    }
     // 사용자가 시드를 바꾸면 기록 재계산의 기준 시드도 함께 갱신
     g.baseTotalBudget = Number((g.totalBudget - (g.cumulativeProfit || 0)).toFixed(2));
     g.splits = parseInt(document.getElementById('g-splits').value, 10) || 40;
@@ -64,20 +116,25 @@ function recalcGrowthMode(syncFromDOM = true) {
   const profitUSD = evalValue - investedAmount;
   const currentRoi = investedAmount > 0 ? (profitUSD / investedAmount) * 100 : 0;
 
-  document.getElementById('growth-cycle-badge').textContent = `현재 ${g.cycleCount || 1}번째 사이클 진행 중`;
-  document.getElementById('g-one-unit-usd').value = formatUSD(oneUnitUSD);
-  document.getElementById('g-one-unit-krw').textContent = `하루 1조각(${formatKRW(oneUnitUSD)})씩만 매수`;
-  document.getElementById('g-current-turn').value = `${currentTurn.toFixed(1)} / ${g.splits}회차`;
-  document.getElementById('g-phase-text').textContent = isFirstHalf
-    ? `🟢 전반전 (1~${g.splits / 2}회차): 공격적 평단 낮추기 구간`
-    : `🟡 후반전 (${g.splits / 2 + 1}~${g.splits}회차): 안전 방어 매수 구간`;
+  const seedUnset = growthSeedUnset(t);
+  const seedMoney = value => (seedUnset ? '-' : formatUSD(value));
+  renderSeedNotice(t, seedUnset, remainingCash);
 
-  document.getElementById('g-remaining-cash').value = formatUSD(remainingCash);
+  document.getElementById('growth-cycle-badge').textContent = `현재 ${g.cycleCount || 1}번째 사이클 진행 중`;
+  document.getElementById('g-held-shares').textContent = `${g.heldShares.toLocaleString()}주`;
+  document.getElementById('g-avg-price').textContent = g.heldShares > 0 ? formatUSD(g.avgPrice) : '첫 매수 전';
+  document.getElementById('g-one-unit-usd').textContent = seedMoney(oneUnitUSD);
+  document.getElementById('g-current-turn').textContent = seedUnset ? '-' : `${currentTurn.toFixed(1)} / ${g.splits}회차`;
+  document.getElementById('g-phase-text').textContent = seedUnset ? '' : isFirstHalf
+    ? `전반전 (1~${g.splits / 2}회차): 평단 낮추기 구간`
+    : `후반전 (${g.splits / 2 + 1}~${g.splits}회차): 방어 매수 구간`;
+
+  document.getElementById('g-remaining-cash').textContent = seedMoney(remainingCash);
   const cashRatio = g.totalBudget > 0 ? ((remainingCash / g.totalBudget) * 100).toFixed(1) : 100;
-  document.getElementById('g-remaining-pct').textContent = `남은 현금 총알 비중 ${cashRatio}%`;
+  document.getElementById('g-remaining-pct').textContent = seedUnset ? '' : `시드의 ${cashRatio}%`;
 
   document.getElementById('g-progress-label').innerHTML =
-    `📊 시드머니 소진 진행률: <strong>${progressPct.toFixed(1)}% (${currentTurn.toFixed(1)}회차 / ${g.splits}회차)</strong>`;
+    `시드 소진율: <strong>${seedUnset ? '-' : `${progressPct.toFixed(1)}% (${currentTurn.toFixed(1)} / ${g.splits}회차)`}</strong>`;
   document.getElementById('g-progress-fill').style.width = `${progressPct}%`;
 
   const roiBadge = document.getElementById('g-current-roi-badge');
@@ -91,36 +148,51 @@ function recalcGrowthMode(syncFromDOM = true) {
   // 오늘 밤 자동 주문 레시피 계산 (라오어 무한매수법 + RSI 부스터 결합)
   const rsi = t.rsi || 50;
   let boosterMultiplier = 1.0;
-  let aiTipText = `💡 <strong>RSI 결합 팁:</strong> 현재 RSI(${rsi.toFixed(1)})가 중립 구간이므로 정석대로 <strong>딱 1회분(${formatUSD(oneUnitUSD)})</strong>만 매수하세요.`;
+  let aiTipText = `RSI ${rsi.toFixed(1)}는 부스터 조건 밖이라 규칙상 <strong>1회분(${formatUSD(oneUnitUSD)})</strong>을 배정합니다.`;
+  let boosterName = '';
 
   if (rsi <= 38 || cur <= t.bbLower * 1.02) {
     boosterMultiplier = 1.5;
-    aiTipText = `🔥 <strong>RSI 저점 부스터 조건 충족</strong> 현재 차트가 과매도 바닥권(RSI ${rsi.toFixed(1)})입니다. 부스터 규칙상 오늘은 1.5회분(<strong>${formatUSD(oneUnitUSD * 1.5)}</strong>)을 매수합니다.`;
+    boosterName = 'RSI 부스터';
+    aiTipText = `<strong>RSI 부스터 조건 충족</strong> (RSI ${rsi.toFixed(1)} · 38 이하 또는 볼린저 하단 근처). 규칙상 오늘은 1.5회분 <strong>${formatUSD(oneUnitUSD * 1.5)}</strong>을 배정합니다.`;
   } else if (rsi >= 64) {
     boosterMultiplier = 0.5;
-    aiTipText = `🛡️ <strong>RSI 고점 방어 조건 충족</strong> 현재 단기 과열권(RSI ${rsi.toFixed(1)})이라 부스터 규칙상 오늘은 0.5회분(<strong>${formatUSD(oneUnitUSD * 0.5)}</strong>)만 매수합니다.`;
+    boosterName = 'RSI 과열 방어';
+    aiTipText = `<strong>RSI 과열 방어 조건 충족</strong> (RSI ${rsi.toFixed(1)} · 64 이상). 규칙상 오늘은 0.5회분 <strong>${formatUSD(oneUnitUSD * 0.5)}</strong>을 배정합니다.`;
   }
 
   // 과거 검증 결과가 있으면 부스터가 실제로 도움이 됐는지 같이 보여준다
   const splitBt = getSplitBacktestResult(appState.currentTicker);
   if (splitBt && splitBt.result.overall) {
     const { plain, booster } = splitBt.result.overall;
-    aiTipText += `<br/><small style="color:#64748b">🧪 과거 검증(상장 초부터): 부스터 사용 연복리 ${formatBtSignedPct(booster.cagr)} · 미사용 ${formatBtSignedPct(plain.cagr)} — 부스터 없이 매일 1회분만 사는 선택지도 있습니다.</small>`;
+    aiTipText += `<br/><small>과거 검증(상장 초부터): 부스터 사용 연복리 ${formatBtSignedPct(booster.cagr)} · 미사용 ${formatBtSignedPct(plain.cagr)} — 부스터 없이 매일 1회분만 사는 선택지도 있습니다.</small>`;
   }
 
   const todayBudget = Math.min(remainingCash, oneUnitUSD * boosterMultiplier);
-  document.getElementById('g-buy-total-budget').textContent = `오늘 추천 배정액: ${formatUSD(todayBudget)}`;
-  document.getElementById('g-buy-ai-tip').innerHTML = aiTipText;
+  const budgetFormula = todayBudget < oneUnitUSD * boosterMultiplier
+    ? '남은 현금 한도까지만 배정'
+    : boosterMultiplier === 1
+      ? '1회분 그대로'
+      : `1회분 ${formatUSD(oneUnitUSD)} × ${boosterMultiplier} (${boosterName})`;
+  document.getElementById('g-buy-total-budget').textContent = `오늘 배정액: ${seedMoney(todayBudget)}`;
+  document.getElementById('g-buy-budget-note').textContent = seedUnset ? '' : budgetFormula;
+  document.getElementById('g-one-unit-krw').textContent = seedUnset ? ''
+    : boosterMultiplier === 1
+      ? `${formatKRW(oneUnitUSD)} · 오늘 배정액과 같음`
+      : `${formatKRW(oneUnitUSD)} · 오늘은 ×${boosterMultiplier} = ${formatUSD(todayBudget)}`;
+  document.getElementById('g-buy-ai-tip').innerHTML = seedUnset ? '' : aiTipText;
 
   const buyBox = document.getElementById('g-buy-orders-content');
-  if (remainingCash <= 10) {
-    buyBox.innerHTML = `<strong>모든 회차(40회분) 매수가 완료되었습니다.</strong><br/>추가 매수 없이 목표 익절가 도달 또는 단기 반등 매도를 기다리세요.`;
+  if (seedUnset) {
+    buyBox.innerHTML = `시드를 입력하면 주문표가 나옵니다. <button type="button" class="text-link-btn" onclick="focusGrowthSeed()">시드 입력하기</button>`;
+  } else if (remainingCash <= 10) {
+    buyBox.innerHTML = `<strong>모든 회차 매수가 완료되었습니다.</strong><br/>규칙상 추가 매수 없이 목표 익절가 도달을 기다립니다.`;
   } else if (g.heldShares === 0) {
     // 1회차 첫 진입
     const firstShares = Math.max(1, Math.floor(todayBudget / cur));
     buyBox.innerHTML = `
-      <strong>📌 [1회차 첫 진입 주문]</strong><br/>
-      • 아직 보유 주식이 없습니다! 오늘 밤 장 마감(LOC) 또는 현재가(<strong>${formatUSD(cur)}</strong>)로 <strong>${firstShares}주</strong>(약 ${formatUSD(firstShares * cur)})를 첫 매수하세요!<br/>
+      <strong>1회차 첫 진입 주문</strong><br/>
+      • 오늘 밤 장 마감(LOC) 또는 현재가(<strong>${formatUSD(cur)}</strong>)로 <strong>${firstShares}주</strong>(약 ${formatUSD(firstShares * cur)}) 매수<br/>
       • 첫 매수가 체결되면 내일부턴 평단가를 기준으로 절반씩 나누어 주문합니다.
     `;
   } else if (isFirstHalf) {
@@ -132,46 +204,47 @@ function recalcGrowthMode(syncFromDOM = true) {
     const order2Shares = Math.max(1, Math.floor(halfBudget / cur));
 
     buyBox.innerHTML = `
-      <strong>📌 [전반전 2분할 LOC 매수 주문표]</strong><br/>
-      1️⃣ <strong>평단가 LOC 매수 (절반):</strong> 내 평단가인 <strong>${formatUSD(order1Price)}</strong>에 <strong>${order1Shares}주</strong> LOC 매수 걸기 <small style="color:#64748b">(종가가 내 평단가보다 낮을 때만 체결되어 평단가를 낮춤)</small><br/>
-      2️⃣ <strong>체결 우선 LOC 매수 (절반):</strong> 현재가 대비 여유 있는 <strong>${formatUSD(order2Price)}</strong>에 <strong>${order2Shares}주</strong> LOC 매수 걸기 <small style="color:#64748b">(종가가 이 가격 이하이면 체결 · 장중 5% 넘게 급등하면 체결되지 않음)</small>
+      <strong>전반전 2분할 LOC 매수</strong><br/>
+      ① <strong>평단가 LOC (절반):</strong> 내 평단가 <strong>${formatUSD(order1Price)}</strong>에 <strong>${order1Shares}주</strong> <small>(종가가 평단가 이하일 때만 체결)</small><br/>
+      ② <strong>체결 우선 LOC (절반):</strong> <strong>${formatUSD(order2Price)}</strong>에 <strong>${order2Shares}주</strong> <small>(종가가 이 가격 이하이면 체결 · 5% 넘게 급등하면 미체결)</small>
     `;
   } else {
     // 후반전: 전액 내 평단가 이하에만 LOC 매수
     const orderPrice = g.avgPrice;
     const orderShares = Math.max(1, Math.floor(todayBudget / orderPrice));
     buyBox.innerHTML = `
-      <strong>📌 [후반전 안전 방어 LOC 매수 주문표]</strong><br/>
-      • 후반전(${currentTurn.toFixed(1)}회차)부터는 내 평단가보다 비싸게 사지 않습니다!<br/>
-      • <strong>평단가 LOC 매수 (전액):</strong> 내 평단가인 <strong>${formatUSD(orderPrice)}</strong>에 <strong>${orderShares}주</strong> LOC 매수를 걸어두세요. (종가가 내 평단가 이하일 때만 매수 체결)
+      <strong>후반전 방어 LOC 매수</strong><br/>
+      • 후반전(${currentTurn.toFixed(1)}회차)부터는 평단가보다 비싸게 사지 않습니다.<br/>
+      • <strong>평단가 LOC (전액):</strong> <strong>${formatUSD(orderPrice)}</strong>에 <strong>${orderShares}주</strong> (종가가 평단가 이하일 때만 체결)
     `;
   }
 
   if (!isQuoteFresh(t)) {
-    buyBox.innerHTML = `<div style="color:#b45309;font-weight:700;margin-bottom:6px;">⚠️ 최신 시세 미확인: 아래 수량은 마지막 확인 가격(${formatUSD(cur)}) 기준입니다. 주문 전 현재가를 확인하세요.</div>` + buyBox.innerHTML;
+    buyBox.innerHTML = `<div class="is-warn">최신 시세 미확인: 아래 수량은 마지막 확인 가격(${formatUSD(cur)}) 기준입니다. 주문 전 현재가를 확인하세요.</div>` + buyBox.innerHTML;
   }
 
   // 오늘 매도(익절) 주문표
   const targetSellPrice = Number(((g.heldShares > 0 ? g.avgPrice : cur) * (1 + g.targetProfitPct / 100)).toFixed(2));
   document.getElementById('g-sell-target-price-label').textContent = `목표 익절가: ${formatUSD(targetSellPrice)} (+${g.targetProfitPct}%)`;
+  renderGraduateButton(t, g, targetSellPrice);
 
   const sellBox = document.getElementById('g-sell-orders-content');
   const sellTip = document.getElementById('g-sell-ai-tip');
 
   if (g.heldShares <= 0) {
     sellBox.innerHTML = `
-      • 1회차 매수가 체결된 다음 날부터 보유 수량 전량을 <strong>평단가 +${g.targetProfitPct}% (${formatUSD(targetSellPrice)})</strong>에 지정가 매도로 걸어두시면 됩니다!
+      • 1회차 매수가 체결된 다음 날부터 보유 수량 전량을 <strong>평단가 +${g.targetProfitPct}%</strong>에 지정가 매도로 겁니다.
     `;
-    sellTip.innerHTML = `💡 매일 장이 열리기 전 지정가 매도를 걸어두면, 밤사이 주가가 급등할 때 자는 동안 자동으로 수익 확정(졸업)됩니다!`;
+    sellTip.innerHTML = `매일 장이 열리기 전 지정가 매도를 걸어 두면 체결 시 ${termHTML('졸업')}합니다.`;
   } else {
     const expectedProfitIfGrad = (targetSellPrice * (1 - TRADING_FEE_RATE) - g.avgPrice * (1 + TRADING_FEE_RATE)) * g.heldShares;
     sellBox.innerHTML = `
-      <strong>📌 [전량 익절(졸업) 지정가 매도 예약]</strong><br/>
+      <strong>전량 익절(졸업) 지정가 매도</strong><br/>
       • <strong>주문 가격:</strong> 내 평단가(${formatUSD(g.avgPrice)}) 대비 +${g.targetProfitPct}%인 <strong>${formatUSD(targetSellPrice)}</strong><br/>
       • <strong>주문 수량:</strong> 현재 보유 수량 전량 <strong>${g.heldShares}주</strong> 지정가(애프터마켓 포함) 매도 걸어두기<br/>
-      • <strong>체결 시 확정 순수익 (수수료 차감):</strong> <strong style="color:var(--accent-green);">+${formatUSD(expectedProfitIfGrad)} (${formatKRW(expectedProfitIfGrad)}) 🎉</strong>
+      • <strong>체결 시 확정 순수익 (수수료 차감):</strong> <strong class="is-up">+${formatUSD(expectedProfitIfGrad)} (${formatKRW(expectedProfitIfGrad)})</strong>
     `;
-    sellTip.innerHTML = `💡 만약 오늘 밤 ${formatUSD(targetSellPrice)}에 도달해 전량 매도되었다면, 우측 상단 <strong>[🎉 목표 달성! 이번 사이클 익절 확정하기]</strong> 버튼을 눌러 수익을 기록하고 1회차부터 새로 시작하세요!`;
+    sellTip.innerHTML = `${formatUSD(targetSellPrice)}에 전량 체결되면 아래 졸업 확정 버튼으로 기록하고 1회차부터 새로 시작합니다.`;
   }
 
   // 과거 검증 · 연간 복리 시뮬레이터 & 명예의 전당 렌더링
@@ -183,12 +256,31 @@ function recalcGrowthMode(syncFromDOM = true) {
 function fillGrowthBuyFromToday() {
   const t = appState.tickers[appState.currentTicker];
   const g = t.growth;
+  if (growthSeedUnset(t)) {
+    alert('40분할 시드를 먼저 입력해 주세요.');
+    focusGrowthSeed();
+    return;
+  }
+  document.getElementById('g-input-type').value = 'BUY';
+  toggleGrowthLogType();
   const oneUnit = g.splits > 0 ? g.totalBudget / g.splits : 0;
   const shares = Math.max(1, Math.floor(oneUnit / t.currentPrice));
 
   document.getElementById('g-input-buy-price').value = t.currentPrice;
   document.getElementById('g-input-buy-shares').value = shares;
   document.getElementById('g-input-buy-memo').value = `정기 분할매수 (${(g.heldShares > 0 ? ((g.heldShares * g.avgPrice) / oneUnit + 1) : 1).toFixed(0)}회차)`;
+}
+
+// 거래 종류에 맞춰 입력칸을 바꾼다. 졸업은 보유 전량이 대상이라 수량을 고칠 수 없다
+function toggleGrowthLogType() {
+  const g = appState.tickers[appState.currentTicker].growth;
+  const isGraduate = document.getElementById('g-input-type').value === 'GRADUATE';
+  const sharesEl = document.getElementById('g-input-buy-shares');
+  document.getElementById('g-input-price-label').textContent = isGraduate ? '전량 매도 체결가 ($)' : '매수 체결가 ($)';
+  document.getElementById('g-input-shares-label').textContent = isGraduate ? '수량 (보유 전량)' : '매수 수량 (주)';
+  sharesEl.disabled = isGraduate;
+  sharesEl.required = !isGraduate;
+  sharesEl.value = isGraduate ? g.heldShares : '';
 }
 
 function addGrowthDailyBuy(e) {
@@ -200,6 +292,20 @@ function addGrowthDailyBuy(e) {
   const shares = parseFloat(document.getElementById('g-input-buy-shares').value);
   const memo = document.getElementById('g-input-buy-memo').value.trim();
   const tradeDate = document.getElementById('g-input-buy-date').value || todayISO();
+
+  if (document.getElementById('g-input-type').value === 'GRADUATE') {
+    if (g.heldShares <= 0) {
+      alert('현재 보유 중인 주식이 없습니다.');
+      return;
+    }
+    if (!(price > 0)) return;
+    recordGrowthGraduation(t, price, tradeDate);
+    document.getElementById('g-input-type').value = 'BUY';
+    toggleGrowthLogType();
+    document.getElementById('g-input-buy-price').value = '';
+    document.getElementById('g-input-buy-memo').value = '';
+    return;
+  }
 
   if (!price || !shares || price <= 0 || shares <= 0) return;
 
@@ -218,8 +324,6 @@ function addGrowthDailyBuy(e) {
   });
   recalculateGrowthFromHistory(t);
 
-  document.getElementById('g-held-shares').value = g.heldShares;
-  document.getElementById('g-avg-price').value = g.avgPrice;
   document.getElementById('g-input-buy-price').value = '';
   document.getElementById('g-input-buy-shares').value = '';
   document.getElementById('g-input-buy-memo').value = '';
@@ -249,14 +353,19 @@ function graduateCurrentCycle() {
     return;
   }
 
-  // 실제 체결가 기준, 매수·매도 수수료(각 0.1%)를 차감한 순수익
+  recordGrowthGraduation(t, sellPrice, todayISO());
+}
+
+// 보유 전량 졸업을 기록한다. 실제 체결가 기준으로 매수·매도 수수료(각 0.1%)를 차감한 순수익을 남긴다
+function recordGrowthGraduation(t, sellPrice, tradeDate) {
+  const g = t.growth;
   const netProceeds = g.heldShares * sellPrice * (1 - TRADING_FEE_RATE);
   const costBasis = g.heldShares * g.avgPrice * (1 + TRADING_FEE_RATE);
   const profit = Number((netProceeds - costBasis).toFixed(2));
 
   g.history.unshift({
     id: Date.now(),
-    tradeDate: todayISO(),
+    tradeDate,
     type: 'GRADUATE',
     price: sellPrice,
     shares: g.heldShares,
@@ -267,8 +376,6 @@ function graduateCurrentCycle() {
   recalculateGrowthFromHistory(t); // 수익이 시드에 합산된다 (복리 재투자)
 
   document.getElementById('g-total-budget').value = g.totalBudget;
-  document.getElementById('g-held-shares').value = 0;
-  document.getElementById('g-avg-price').value = t.currentPrice;
 
   saveState();
   recalcGrowthMode(false);
@@ -331,10 +438,23 @@ function deleteGrowthHistory(id) {
 
 function renderGrowthCompoundAndHistory() {
   const t = appState.tickers[appState.currentTicker];
+  renderGrowthCompound(t);
+  renderGrowthHistory(t);
+}
+
+function renderGrowthCompound(t) {
   const g = t.growth;
 
   document.getElementById('g-cumulative-profit-badge').textContent =
     `누적 확정 수익: ${formatSignedUSD(g.cumulativeProfit || 0)} (${formatKRW(g.cumulativeProfit || 0)})`;
+
+  const seedUnset = growthSeedUnset(t);
+  document.getElementById('g-compound-table-wrap').style.display = seedUnset ? 'none' : '';
+  if (seedUnset) {
+    document.getElementById('g-compound-summary').innerHTML =
+      `<div class="bt-placeholder full-row">시드를 입력하면 복리 시뮬레이션을 계산합니다.</div>`;
+    return;
+  }
 
   // 과거 검증을 돌렸으면 실제 평균(졸업 1회 수익·연간 졸업 횟수)을, 아니면 앱 기본 가정치를 쓴다
   const splitBt = getSplitBacktestResult(appState.currentTicker);
@@ -354,17 +474,17 @@ function renderGrowthCompoundAndHistory() {
   const summaryBox = document.getElementById('g-compound-summary');
   if (summaryBox) {
     const caveat = useBt
-      ? `🧪 상장 초부터 과거 일봉으로 검증한 평균입니다 (1년 값은 실제 연복리 ${formatBtSignedPct(btAll.cagr)} 기준). 같은 기간 최대 낙폭 ${formatBtSignedPct(btAll.mdd, 0)}, 시드를 다 쓰고 최장 ${btAll.maxStuckDays.toLocaleString()}거래일 갇힌 구간이 있었습니다. 세후 금액은 1년 수익을 모두 실현했고 그해 다른 해외주식 손익이 없다고 보고 '(이익 − 250만 원) × 22%'로 어림한 값입니다. 환전 비용은 반영되지 않았습니다.`
-      : `⚠️ 앱 기본 가정치입니다 (매 사이클 시드 55% 소진 후 +${g.targetProfitPct}% 졸업, 연 6회 전부 성공). 위 <strong>🧪 과거 검증</strong>을 실행하면 실제 과거 평균으로 바뀝니다. 실패·장기 물림 사이클과 환전 비용은 반영되지 않았고, 세후 금액은 '(이익 − 250만 원) × 22%'로 어림한 값입니다.`;
+      ? `상장 초부터 과거 일봉으로 검증한 평균입니다 (1년 값은 실제 연복리 ${formatBtSignedPct(btAll.cagr)} 기준). 같은 기간 최대 낙폭 ${formatBtSignedPct(btAll.mdd, 0)}, 시드를 다 쓰고 최장 ${btAll.maxStuckDays.toLocaleString()}거래일 갇힌 구간이 있었습니다. 세후 금액은 1년 수익을 모두 실현했고 그해 다른 해외주식 손익이 없다고 보고 '(이익 − 250만 원) × 22%'로 어림한 값입니다. 환전 비용은 반영되지 않았습니다.`
+      : `앱 기본 가정치입니다 (매 사이클 시드 55% 소진 후 +${g.targetProfitPct}% 졸업, 연 6회 전부 성공). 위 <strong>과거 검증</strong>을 실행하면 실제 과거 평균으로 바뀝니다. 실패·장기 물림 사이클과 환전 비용은 반영되지 않았고, 세후 금액은 '(이익 − 250만 원) × 22%'로 어림한 값입니다.`;
     summaryBox.innerHTML = `
       <div class="diag-item">
         <span class="diag-label">졸업 1회 평균 순수익 ${useBt ? '(과거 평균)' : '(가정치)'}</span>
-        <strong class="diag-value" style="color:var(--accent-green);">${formatSignedUSD(oneCycleProfit)}</strong>
+        <strong class="diag-value">${formatSignedUSD(oneCycleProfit)}</strong>
         <span class="diag-sub">${formatKRW(oneCycleProfit)} (시드 대비 ${formatBtSignedPct(avgCycleYield)})</span>
       </div>
       <div class="diag-item">
         <span class="diag-label">1년(약 ${cyclesPerYear.toFixed(1)}회 졸업) 운영 시 순수익 ${useBt ? '(과거 연복리)' : '(가정치)'}</span>
-        <strong class="diag-value" style="color:var(--accent-blue);">${formatSignedUSD(oneYearProfit)}</strong>
+        <strong class="diag-value">${formatSignedUSD(oneYearProfit)}</strong>
         <span class="diag-sub">${formatKRW(oneYearProfit)} · 세후 약 <strong>${formatSignedUSD(oneYearAfterTax)}</strong> (양도세 ${formatUSD(oneYearTax)})</span>
       </div>
       <div class="diag-item highlight-diag">
@@ -382,7 +502,9 @@ function renderGrowthCompoundAndHistory() {
   const cTbody = document.getElementById('g-compound-tbody');
   if (cTbody) {
     cTbody.innerHTML = '';
+    const coreCounts = [1, 2, 4, 6, 8]; // 접힌 표에 남길 졸업 횟수
     for (let i = 1; i <= 8; i++) {
+      if (!isTableExpanded('compound') && !coreCounts.includes(i)) continue;
       const asset = g.totalBudget * Math.pow(1 + avgCycleYield, i);
       const netProfit = asset - g.totalBudget;
       const tr = document.createElement('tr');
@@ -390,22 +512,27 @@ function renderGrowthCompoundAndHistory() {
         <td><strong>${i}회 졸업 시</strong></td>
         <td>약 ${(i * monthsPerCycle).toFixed(1)}개월 뒤</td>
         <td><strong>${formatUSD(asset)}</strong></td>
-        <td style="color:var(--accent-green); font-weight:800;">${formatSignedUSD(netProfit)}</td>
+        <td class="${netProfit >= 0 ? 'is-up' : 'is-down'}">${formatSignedUSD(netProfit)}</td>
         <td>${formatKRW(asset)}</td>
       `;
       cTbody.appendChild(tr);
     }
+    document.getElementById('g-compound-more').innerHTML = tableMoreHTML('compound', 8, coreCounts.length);
   }
+}
 
+function renderGrowthHistory(t) {
+  const g = t.growth;
   const hTbody = document.getElementById('g-history-tbody');
   if (!hTbody) return;
   hTbody.innerHTML = '';
 
   if (!g.history || g.history.length === 0) {
     hTbody.innerHTML = `
-      <tr>
-        <td colspan="7" style="text-align:center; color:var(--text-muted); padding:20px;">
-          아직 기록된 분할매수·익절 내역이 없습니다. 오늘 첫 분할매수를 시작하고 기록해 보세요!
+      <tr class="table-empty">
+        <td colspan="7">
+          <p>아직 기록이 없습니다. 첫 분할매수가 체결되면 기록해 보세요.</p>
+          <button type="button" class="btn-secondary" onclick="fillGrowthBuyFromToday()">오늘 1회분 수량 채우기</button>
         </td>
       </tr>
     `;
@@ -417,10 +544,10 @@ function renderGrowthCompoundAndHistory() {
     const isGrad = item.type === 'GRADUATE';
     const isAdjust = item.type === 'ADJUST';
     const badge = isGrad
-      ? `<span style="color:#d97706; font-weight:800;">🏆 사이클 익절 졸업!</span>`
+      ? `<span class="is-sell">졸업 (전량 매도)</span>`
       : isAdjust
-        ? `<span style="color:var(--text-muted); font-weight:700;">🧾 보유분 조정</span>`
-        : `<span style="color:var(--accent-green); font-weight:700;">🟢 정기 분할매수</span>`;
+        ? `<span>보유분 조정</span>`
+        : `<span class="is-buy">정기 분할매수</span>`;
 
     if (editingGrowthId === item.id) {
       tr.innerHTML = `
@@ -436,7 +563,7 @@ function renderGrowthCompoundAndHistory() {
         <td><input type="text" id="edit-g-memo-${item.id}" class="inline-edit-input" value="${escapeHTML(item.memo)}" /></td>
         <td>
           <div class="action-btn-group">
-            <button type="button" class="btn-save-inline" onclick="saveEditGrowthHistory(${item.id})">💾 저장</button>
+            <button type="button" class="btn-save-inline" onclick="saveEditGrowthHistory(${item.id})">저장</button>
             <button type="button" class="btn-cancel-inline" onclick="cancelEditGrowthHistory()">취소</button>
           </div>
         </td>
@@ -451,7 +578,7 @@ function renderGrowthCompoundAndHistory() {
         <td>${escapeHTML(item.memo) || '-'}</td>
         <td>
           <div class="action-btn-group">
-            ${isAdjust ? '' : `<button type="button" class="btn-edit" onclick="startEditGrowthHistory(${item.id})">✏️ 수정</button>`}
+            ${isAdjust ? '' : `<button type="button" class="btn-edit" onclick="startEditGrowthHistory(${item.id})">수정</button>`}
             <button type="button" class="btn-delete" onclick="deleteGrowthHistory(${item.id})">삭제</button>
           </div>
         </td>

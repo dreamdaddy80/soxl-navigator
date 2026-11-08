@@ -108,19 +108,24 @@ async function fetchFromTwelveData(ticker, apiKey) {
 
   let livePrice = regPrice;
   let prevClose = Number(quote.previous_close);
-  let sessionLabel = quote.is_market_open ? '🟢 정규장 실시간 기준 주가' : '🟢 최근 정규장 마감·체결 주가';
+  let sessionLabel = quote.is_market_open ? '본장 실시간 주가' : '최근 본장 마감 주가';
+  let sessionKey = quote.is_market_open ? 'REGULAR' : 'CLOSE';
+  let asOfDate = String(quote.datetime).slice(0, 10);
   const extPrice = Number(quote.extended_price);
   if (!quote.is_market_open && extPrice > 0 && quote.extended_timestamp) {
     livePrice = extPrice;
+    asOfDate = newYorkClock(Number(quote.extended_timestamp) * 1000).date;
     if (getNewYorkMinutes(Number(quote.extended_timestamp)) < 9 * 60 + 30) {
-      sessionLabel = '🌅 프리마켓(장전) 실시간 주가';
+      sessionLabel = '프리장 주가';
+      sessionKey = 'PRE';
       prevClose = regPrice; // 장전 등락은 직전 정규장 종가 대비
     } else {
-      sessionLabel = '🌙 애프터마켓·최근 체결 주가';
+      sessionLabel = '애프터장 최근 체결 주가';
+      sessionKey = 'AFTER';
     }
   }
 
-  return { bars, livePrice, prevClose, sessionLabel, source: 'Twelve Data', isMarketOpen: quote.is_market_open === true };
+  return { bars, livePrice, prevClose, sessionLabel, sessionKey, asOfDate, source: 'Twelve Data', isMarketOpen: quote.is_market_open === true };
 }
 
 // 무료 프록시 여러 곳에 동시에 Yahoo 차트를 요청하고 가장 먼저 온 유효한 응답을 쓴다 (첫 응답이 느린 경우가 많음)
@@ -163,17 +168,24 @@ async function fetchFromYahooProxies(ticker) {
 
   const regPrice = Number(meta.regularMarketPrice || bars[bars.length - 1].close);
   let livePrice = regPrice;
-  let sessionLabel = '🟢 정규장 실시간 기준 주가';
+  let sessionLabel = '본장 실시간 주가';
+  let sessionKey = 'REGULAR';
+  let asOfSec = Number(meta.regularMarketTime) || 0;
 
   const mState = String(meta.marketState || '').toUpperCase();
   if (mState === 'PRE' && meta.preMarketPrice) {
     livePrice = Number(meta.preMarketPrice);
-    sessionLabel = '🌅 프리마켓(장전) 실시간 주가';
+    sessionLabel = '프리장 주가';
+    sessionKey = 'PRE';
+    asOfSec = Number(meta.preMarketTime) || asOfSec;
   } else if ((mState === 'POST' || mState === 'POSTPOST' || mState === 'CLOSED') && meta.postMarketPrice) {
     livePrice = Number(meta.postMarketPrice);
-    sessionLabel = '🌙 애프터마켓·최근 체결 주가';
+    sessionLabel = '애프터장 최근 체결 주가';
+    sessionKey = 'AFTER';
+    asOfSec = Number(meta.postMarketTime) || asOfSec;
   } else if (mState !== 'REGULAR') {
-    sessionLabel = '🟢 최근 정규장 마감·체결 주가';
+    sessionLabel = '최근 본장 마감 주가';
+    sessionKey = 'CLOSE';
   }
 
   // meta.chartPreviousClose는 조회 구간(3개월) 시작 전 종가라 전일 종가로 쓰면 안 된다.
@@ -182,7 +194,7 @@ async function fetchFromYahooProxies(ticker) {
     ? regPrice
     : (bars.length >= 2 ? bars[bars.length - 2].close : regPrice);
 
-  return { bars, livePrice, prevClose, sessionLabel, source: '무료 경로' };
+  return { bars, livePrice, prevClose, sessionLabel, sessionKey, asOfDate: asOfSec ? newYorkClock(asOfSec * 1000).date : '', source: 'Yahoo(무료 경로)' };
 }
 
 // isAutoRefresh: 60초 주기 갱신이면 사용자가 시뮬레이터에 입력한 매도·매수가를 덮어쓰지 않는다
@@ -193,7 +205,7 @@ async function fetchMarketDataAndAnalyze(isAutoRefresh = false) {
   const timeBadge = document.getElementById('analysis-time-badge');
   const sessionBadge = document.getElementById('market-session-badge');
 
-  badgeEl.textContent = `🔄 ${ticker} 실시간 시세 및 기술적 지표 계산 중...`;
+  badgeEl.textContent = `${ticker} 시세와 보조지표를 불러오는 중`;
 
   // 1순위: 사용자가 등록한 Twelve Data 키, 실패하거나 키가 없으면 무료 프록시 경로
   const apiKey = getQuoteApiKey();
@@ -226,6 +238,9 @@ async function fetchMarketDataAndAnalyze(isAutoRefresh = false) {
     const sessionLabel = market.sessionLabel;
 
     t.marketSessionLabel = sessionLabel;
+    t.quoteSource = market.source;
+    t.quoteSessionKey = market.sessionKey || '';
+    t.quoteAsOfDate = market.asOfDate || '';
     if (sessionBadge) sessionBadge.textContent = sessionLabel;
 
     const prevClose = market.prevClose || closes[closes.length - 2] || livePrice;
@@ -257,8 +272,6 @@ async function fetchMarketDataAndAnalyze(isAutoRefresh = false) {
 
     if (t.growth && t.growth.heldShares === 0) {
       t.growth.avgPrice = t.currentPrice;
-      const gAvgEl = document.getElementById('g-avg-price');
-      if (gAvgEl) gAvgEl.value = t.currentPrice;
     }
 
     t.lastQuoteAt = Date.now();
@@ -269,32 +282,32 @@ async function fetchMarketDataAndAnalyze(isAutoRefresh = false) {
     document.getElementById('current-price').value = t.currentPrice;
 
     const nowStr = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    badgeEl.textContent = `🟢 ${ticker} 실시간 시세·보조지표 연동 완료 (${nowStr})`;
-    timeBadge.textContent = `${nowStr} 동기화`;
+    badgeEl.textContent = `${ticker} 시세 연결됨`;
+    timeBadge.textContent = `앱 갱신 ${nowStr}`;
     if (twelveError) {
-      statusEl.textContent = `⚠️ Twelve Data 오류(${twelveError}) · 보조 경로 가격($${t.currentPrice}) 반영`;
-      statusEl.style.color = '#b45309';
+      statusEl.textContent = `Twelve Data 오류(${twelveError}) · 보조 경로 가격($${t.currentPrice}) 반영`;
+      statusEl.style.color = 'var(--warn)';
     } else {
-      statusEl.textContent = `✅ ${market.source} 가격($${t.currentPrice}) 자동 반영 완료`;
-      statusEl.style.color = 'var(--accent-green)';
+      statusEl.textContent = `${market.source} 가격($${t.currentPrice}) 자동 반영`;
+      statusEl.style.color = 'var(--info)';
     }
   } else {
     // 네트워크/프록시 지연 시 기존 저장된 유효 가격을 보존
     const savedCur = t.currentPrice || parseFloat(document.getElementById('current-price').value) || 45.97;
     t.currentPrice = savedCur;
     document.getElementById('current-price').value = savedCur;
-    if (sessionBadge) sessionBadge.textContent = t.marketSessionLabel || '⚡ 최근 저장 시세 기준';
+    if (sessionBadge) sessionBadge.textContent = t.marketSessionLabel || '최근 저장 시세 기준';
     computeRealisticTargets(t, !isAutoRefresh);
 
     const lastOkStr = t.lastQuoteAt
       ? new Date(t.lastQuoteAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
       : '기록 없음';
-    badgeEl.textContent = `🟡 최근 저장가($${savedCur}) 기반 타점 분석`;
+    badgeEl.textContent = `시세 미연결 · 최근 저장가($${savedCur}) 사용`;
     const reason = twelveError
       ? `Twelve Data 오류(${twelveError})`
-      : apiKey ? '시세 서버 응답 없음' : '무료 시세 경로 응답 없음 · 🔑 시세 키를 등록하면 안정적으로 받을 수 있습니다';
-    statusEl.textContent = `⚠️ ${reason} · 마지막 확인 ${lastOkStr} · $${savedCur} (증권사 앱 가격으로 직접 수정 가능)`;
-    statusEl.style.color = '#b45309';
+      : apiKey ? '시세 서버 응답 없음' : '무료 시세 경로 응답 없음 · 시세 키를 등록하면 안정적으로 받을 수 있습니다';
+    statusEl.textContent = `${reason} · 마지막 확인 ${lastOkStr} · $${savedCur} (증권사 앱 가격으로 직접 수정 가능)`;
+    statusEl.style.color = 'var(--warn)';
   }
 
   saveState();

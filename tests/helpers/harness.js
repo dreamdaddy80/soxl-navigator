@@ -23,6 +23,7 @@ function fakeElement(id) {
     textContent: '',
     style: {},
     classList: { toggle() {}, add() {}, remove() {} },
+    setAttribute() {},
     appendChild(child) { this.innerHTML += child.innerHTML; }
   };
 }

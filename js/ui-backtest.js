@@ -79,7 +79,7 @@ async function fetchBacktestHistory(ticker) {
     if (bars.length < 300) throw new Error('일봉 데이터 부족');
     return { at: Date.now(), source: 'Yahoo(무료 경로)', bars };
   } catch (e) {
-    throw new Error(twelveError ? `Twelve Data: ${twelveError} / 무료 경로 응답 없음` : '무료 경로 응답 없음 · 🔑 시세 키를 등록하면 안정적으로 받을 수 있습니다');
+    throw new Error(twelveError ? `Twelve Data: ${twelveError} / 무료 경로 응답 없음` : '무료 경로 응답 없음 · 시세 키를 등록하면 안정적으로 받을 수 있습니다');
   }
 }
 
@@ -121,7 +121,7 @@ async function runBacktestWithHistory(kind, allowNetwork) {
   if (allowNetwork) {
     if (btLoading[ticker]) return;
     btLoading[ticker] = true;
-    box.innerHTML = `<div class="bt-placeholder">⏳ ${ticker} 상장 이후 일봉을 받아오는 중입니다... (최대 30초)</div>`;
+    box.innerHTML = `<div class="bt-placeholder">${ticker} 상장 이후 일봉을 받아오는 중입니다. (최대 30초)</div>`;
   }
   try {
     await loadBacktestHistory(ticker, allowNetwork);
@@ -131,7 +131,7 @@ async function runBacktestWithHistory(kind, allowNetwork) {
     recalcGrowthMode(false);
   } catch (e) {
     if (ticker === appState.currentTicker) {
-      box.innerHTML = `<div class="bt-placeholder bt-error">⚠️ 과거 일봉을 받지 못했습니다: ${escapeHTML(e.message)}</div>`;
+      box.innerHTML = `<div class="bt-placeholder bt-error">과거 일봉을 받지 못했습니다: ${escapeHTML(e.message)}</div>`;
     }
   } finally {
     if (allowNetwork) btLoading[ticker] = false;
@@ -193,30 +193,30 @@ function renderRotationScenarios(p) {
   }
   const oddsHint = history
     ? '매도가가 현재가보다 높고 재매수가가 매도가보다 낮아야 과거 빈도를 셀 수 있습니다.'
-    : '과거 빈도는 아래 🧪 과거 검증에서 일봉을 받으면 표시됩니다.';
+    : '과거 빈도는 과거 검증 탭에서 일봉을 받으면 표시됩니다.';
 
   const scenarios = [
     {
       cls: 'scenario-good',
-      title: '✅ 계획대로: 매도 → 재매수 체결',
+      title: '계획대로: 매도 → 재매수 체결',
       body: `주식 ${shares.toLocaleString()}주 → <strong>${paths.plan.shares.toLocaleString()}주</strong>, 본전 주가 ${formatUSD(beHold)} → <strong>${formatUSD(bePlan)}</strong>`,
       odds: odds && `팔고 나서 20거래일 안에 재매수가 체결된 경우 ${formatBtPct(odds.rebuy20Pct)}, 60거래일 안 ${formatBtPct(odds.rebuy60Pct)}`
     },
     {
       cls: 'scenario-bad',
-      title: '⚠️ 팔고 나서 계속 오름: 재매수 못 함',
+      title: '팔고 나서 계속 오름: 재매수 못 함',
       body: `${paths.soldOnly.shares.toLocaleString()}주 + 현금 ${formatUSD(paths.soldOnly.cash)}로 남아 본전 주가가 ${formatUSD(beHold)} → <strong>${formatUSD(beSoldOnly)}</strong>로 <strong>올라갑니다.</strong> 주가가 ${formatUSD(beHold)}까지 그대로 오르면 그냥 보유보다 <strong>${formatUSD(missAtBreakeven)}</strong> 적습니다.`,
       odds: odds && `1년이 지나도 재매수가 안 온 경우 ${formatBtPct(100 - odds.rebuy252Pct)}${odds.medianRunUpWhenMissed != null ? ` · 그동안 주가는 매도가보다 중앙값 ${formatBtSignedPct(odds.medianRunUpWhenMissed, 0)}까지 올랐습니다` : ''}`
     },
     {
       cls: 'scenario-warn',
-      title: '📉 재매수 뒤 더 빠짐',
+      title: '재매수 뒤 더 빠짐',
       body: `재매수가(${formatUSD(buyPrice)})에서 -20% 더 빠져 ${formatUSD(deeperPrice)}가 되면 평가액 ${formatUSD(valueAt(paths.plan, deeperPrice))} (그냥 보유 ${formatUSD(valueAt(paths.hold, deeperPrice))}). 회전을 마친 뒤의 하락은 보유보다 불리하지 않지만, 재매수가가 바닥이라는 뜻도 아닙니다.`,
       odds: odds && `재매수 후 60거래일 안에 -10% 넘게 더 빠진 경우 ${formatBtPct(odds.deeper10Pct)}, -20% 넘게 ${formatBtPct(odds.deeper20Pct)}`
     },
     {
       cls: 'scenario-neutral',
-      title: '🔁 반등 없이 하락: 매도 미체결',
+      title: '반등 없이 하락: 매도 미체결',
       body: `매도가(${formatUSD(sellPrice)})에 닿지 않으면 아무 주문도 체결되지 않아 그냥 보유와 같습니다.`,
       odds: odds && `60거래일 안에 매도가에 닿은 경우 ${formatBtPct(odds.sellFill60Pct)}, 1년 안 ${formatBtPct(odds.sellFill252Pct)}`
     }
@@ -246,13 +246,16 @@ function renderRotationScenarios(p) {
       </tr>`;
   }).join('');
 
+  document.getElementById('concl-rescue-scenario').innerHTML =
+    `재매수를 못 하면 본전이 <strong>${formatUSD(beHold)} → ${formatUSD(beSoldOnly)}</strong>로 올라갑니다. 계획대로 되면 ${formatUSD(bePlan)}입니다.`;
+
   box.innerHTML = `
     <div class="scenario-grid">
       ${scenarios.map(sc => `
         <div class="scenario-item ${sc.cls}">
           <strong class="scenario-title">${sc.title}</strong>
           <span class="scenario-body">${sc.body}</span>
-          <span class="scenario-odds">📊 ${sc.odds || oddsHint}</span>
+          <span class="scenario-odds">${sc.odds || oddsHint}</span>
         </div>`).join('')}
     </div>
     <div class="table-responsive">
@@ -269,8 +272,8 @@ function renderRotationScenarios(p) {
       </table>
     </div>
     <div class="bt-notes">
-      <div>금액은 그 가격에서의 총 평가액(주식 + 현금)입니다. '계획대로 회전한 뒤'는 재매수가까지 내려갔다가 그 가격이 된 경우입니다. 초록색은 그 가격에서 가장 큰 값입니다.</div>
-      <div>${odds ? `과거 빈도는 ${ticker} 일봉의 시작점 ${odds.n.toLocaleString()}일(${p.crashOnly ? '폭락 후' : '모든 거래일'} · 아래 과거 검증의 '시작 시점' 설정)에서 지금과 같은 비율(+${(up * 100).toFixed(1)}% 매도, 매도가 -${(drop * 100).toFixed(1)}% 재매수)로 센 값입니다. ` : ''}과거 빈도가 앞으로의 확률을 보장하지 않습니다.</div>
+      <div>금액은 그 가격에서의 총 평가액(주식 + 현금)입니다. '계획대로 회전한 뒤'는 재매수가까지 내려갔다가 그 가격이 된 경우입니다. 노란 칸은 그 가격에서 가장 큰 값입니다.</div>
+      <div>${odds ? `과거 빈도는 ${ticker} 일봉의 시작점 ${odds.n.toLocaleString()}일(${p.crashOnly ? '폭락 후' : '모든 거래일'} · 과거 검증 탭의 '시작 시점' 설정)에서 지금과 같은 비율(+${(up * 100).toFixed(1)}% 매도, 매도가 -${(drop * 100).toFixed(1)}% 재매수)로 센 값입니다. ` : ''}과거 빈도가 앞으로의 확률을 보장하지 않습니다.</div>
     </div>
   `;
 }
@@ -283,7 +286,7 @@ async function runAlternativesBacktest() {
   const loadingKey = `${ticker}:alt`;
   if (!box || btLoading[loadingKey]) return;
   btLoading[loadingKey] = true;
-  box.innerHTML = `<div class="bt-placeholder">⏳ ${ticker}·${base} 상장 이후 일봉을 받아오는 중입니다... (최대 1분)</div>`;
+  box.innerHTML = `<div class="bt-placeholder">${ticker}·${base} 상장 이후 일봉을 받아오는 중입니다. (최대 1분)</div>`;
   try {
     await loadBacktestHistory(ticker, true);
     await loadBacktestHistory(base, true);
@@ -291,7 +294,7 @@ async function runAlternativesBacktest() {
     renderRotationBacktest();
   } catch (e) {
     if (ticker === appState.currentTicker) {
-      box.innerHTML = `<div class="bt-placeholder bt-error">⚠️ 과거 일봉을 받지 못했습니다: ${escapeHTML(e.message)}</div>`;
+      box.innerHTML = `<div class="bt-placeholder bt-error">과거 일봉을 받지 못했습니다: ${escapeHTML(e.message)}</div>`;
     }
   } finally {
     btLoading[loadingKey] = false;
@@ -309,7 +312,8 @@ function renderAlternativesBacktest(p) {
   const history = readBacktestHistoryCache(ticker);
   const baseHistory = readBacktestHistoryCache(base);
   if (!history || !baseHistory) {
-    box.innerHTML = `<div class="bt-placeholder"><strong>📊 대안과 비교</strong>를 누르면 ${history ? '' : `${ticker}와 `}${base} 일봉을 받아 비교합니다${getQuoteApiKey() ? ` (Twelve Data ${history ? 1 : 2}회 조회)` : ''}.</div>`;
+    box.innerHTML = `<div class="bt-placeholder"><strong>대안과 비교</strong>를 누르면 ${history ? '' : `${ticker}와 `}${base} 일봉을 받아 비교합니다${getQuoteApiKey() ? ` (Twelve Data ${history ? 1 : 2}회 조회)` : ''}.</div>`;
+    document.getElementById('concl-rescue-alt').textContent = '아직 비교 전입니다. 대안과 비교를 누르면 결과가 여기에 요약됩니다.';
     return;
   }
 
@@ -356,16 +360,22 @@ function renderAlternativesBacktest(p) {
       ${mark('medianDrawdown', x.medianDrawdown, bestDd, `${formatBtSignedPct(x.medianDrawdown, 0)} / ${formatBtSignedPct(x.worstDrawdown, 0)}`)}
     </tr>`).join('');
 
+  const candidates = r.rules.filter(x => x.id !== 'hold' && x.ratio2y != null);
+  const topRule = candidates.reduce((a, b) => (b.ratio2y > a.ratio2y ? b : a), candidates[0]);
+  document.getElementById('concl-rescue-alt').innerHTML = !topRule ? '비교할 수 있는 규칙이 없습니다.' : topRule.ratio2y > 1
+    ? `2년 뒤 자산 중앙값이 가장 나았던 규칙은 <strong>${topRule.label}</strong>입니다 (보유 대비 ${formatBtSignedPct(topRule.ratio2y - 1)}).`
+    : `비교한 규칙 모두 2년 뒤 자산 중앙값이 그냥 보유보다 낮았습니다. 가장 가까운 규칙은 <strong>${topRule.label}</strong>입니다 (${formatBtSignedPct(topRule.ratio2y - 1)}).`;
+
   box.innerHTML = `
     <div class="table-responsive">
       <table class="bt-table">
         <thead>
           <tr>
             <th>규칙</th>
-            <th>1년 뒤 자산 (보유 대비)</th>
+            <th class="col-opt">1년 뒤 자산 (보유 대비)</th>
             <th>2년 뒤 자산 (보유 대비)</th>
             <th>2년 뒤 보유보다 나은 비율</th>
-            ${withBreakeven ? `<th>2년 안 본전(+${((r.breakevenMultiple - 1) * 100).toFixed(0)}%) 도달</th><th>도달까지 거래일 (중앙값)</th>` : ''}
+            ${withBreakeven ? `<th class="col-opt">2년 안 본전(+${((r.breakevenMultiple - 1) * 100).toFixed(0)}%) 도달</th><th class="col-opt">도달까지 거래일 (중앙값)</th>` : ''}
             <th>시작 후 추가 낙폭 (중앙값 / 최악)</th>
           </tr>
         </thead>
@@ -373,7 +383,7 @@ function renderAlternativesBacktest(p) {
       </table>
     </div>
     <div class="bt-notes">
-      <div>자산 비율은 중앙값입니다. 초록색은 그 열에서 가장 나은 값입니다. 시작점 ${r.n.toLocaleString()}일 (${r.from} ~ ${r.to}, 끝까지 2년이 남은 날만).</div>
+      <div>자산 비율은 중앙값입니다. 노란 칸은 그 열에서 가장 나은 값입니다. 시작점 ${r.n.toLocaleString()}일 (${r.from} ~ ${r.to}, 끝까지 2년이 남은 날만).</div>
       <div>200일선 규칙은 전일 종가로 판단해 그날 종가에 옮긴다고 가정했고, 옮길 때마다 매도·매수 수수료(편도 0.1%)를 뺐습니다. 세금은 반영하지 않았습니다. 과거에는 폭락이 모두 회복해 보유가 유리했지만, 이번에도 회복한다는 보장은 없습니다.</div>
     </div>
   `;
@@ -419,7 +429,8 @@ function renderRotationBacktest() {
 
   const history = btHistory[ticker] || readBacktestHistoryCache(ticker);
   if (!history) {
-    box.innerHTML = `<div class="bt-placeholder">아직 검증 전입니다. <strong>📊 과거 일봉으로 검증</strong>을 누르면 ${ticker} 상장 이후 일봉을 한 번 받아 이 기기에 저장합니다${getQuoteApiKey() ? ' (Twelve Data 1회 조회)' : ''}.</div>`;
+    box.innerHTML = `<div class="bt-placeholder">아직 검증 전입니다. <strong>과거 일봉으로 검증</strong>을 누르면 ${ticker} 상장 이후 일봉을 한 번 받아 이 기기에 저장합니다${getQuoteApiKey() ? ' (Twelve Data 1회 조회)' : ''}.</div>`;
+    document.getElementById('concl-rescue-backtest').textContent = '아직 검증 전입니다. 과거 일봉으로 검증을 누르면 결론이 여기에 표시됩니다.';
     return;
   }
 
@@ -446,11 +457,12 @@ function renderRotationBacktest() {
   }
 
   const median = h1.medianRatio;
-  const verdict = median < 0.99
-    ? { cls: 'bt-verdict-bad', text: `⚠️ 과거에는 이 규칙보다 <strong>그냥 보유하는 쪽이 대체로 나았습니다.</strong> 1년 뒤 회전 쪽 자산이 보유 대비 중앙값 ${formatBtSignedPct(median - 1)}였습니다.` }
-    : median > 1.01
-      ? { cls: 'bt-verdict-good', text: `✅ 과거에는 이 규칙이 보유보다 나은 경우가 많았습니다. 1년 뒤 회전 쪽 자산이 보유 대비 중앙값 ${formatBtSignedPct(median - 1)}였습니다.` }
-      : { cls: 'bt-verdict-flat', text: `➖ 과거에는 보유와 큰 차이가 없었습니다 (1년 뒤 중앙값 ${formatBtSignedPct(median - 1)}).` };
+  const holdBetterPct = 100 - h1.beatPct;
+  const headline = h1.beatPct < 50
+    ? `과거엔 그냥 보유가 ${formatBtPct(holdBetterPct)} 확률로 더 나았음`
+    : `과거엔 이 회전 규칙이 ${formatBtPct(h1.beatPct)} 확률로 더 나았음`;
+  document.getElementById('concl-rescue-backtest').innerHTML =
+    `<strong>${headline}</strong> <span>1년 뒤 회전 쪽 자산은 보유 대비 중앙값 ${formatBtSignedPct(median - 1)}입니다.</span>`;
 
   const horizonItem = (h, label) => !h || !h.n ? '' : `
     <div class="diag-item">
@@ -472,7 +484,6 @@ function renderRotationBacktest() {
   }
 
   box.innerHTML = `
-    <div class="bt-verdict ${verdict.cls}">${verdict.text}</div>
     <div class="diagnosis-box">
       ${horizonItem(h1, '1년 뒤')}
       ${horizonItem(h2, '2년 뒤')}
@@ -480,7 +491,7 @@ function renderRotationBacktest() {
     </div>
     <div class="bt-notes">
       <div>시작점: ${startLabel} ${r.startCount.toLocaleString()}일 · 서로 겹치지 않는 하락 구간은 약 <strong>${r.episodes.length}번</strong>뿐이라 통계적 증명이 아닌 방향성으로 보세요.</div>
-      <div>회전이 지는 주된 이유: 팔고 난 뒤 눌림목이 오지 않고 계속 오르면 현금이 묶인 채 회복을 놓칩니다. 위 '재매수 대기 한도'를 바꿔 비교해 보세요.</div>
+      <div>회전이 지는 주된 이유: 팔고 난 뒤 눌림목이 오지 않고 계속 오르면 현금이 묶인 채 회복을 놓칩니다. 위의 '재매수 대기 한도'를 바꿔 비교해 보세요.</div>
       <div>${btDataLine(history)} · 수수료 편도 0.1%, 지정가는 고가·저가가 닿은 날 체결 가정, 세금 미반영. 과거 결과가 미래를 보장하지 않습니다.</div>
     </div>
   `;
@@ -500,6 +511,13 @@ function getSplitBacktestResult(ticker) {
   return cached;
 }
 
+// 접힌 표에 남길 행: 첫해, 연복리 최고·최저, 최근 2개
+function splitCoreRows(rows) {
+  const byCagr = [...rows].sort((a, b) => a.plain.cagr - b.plain.cagr);
+  const keep = new Set([rows[0], byCagr[0], byCagr[byCagr.length - 1], ...rows.slice(-2)]);
+  return rows.filter(r => keep.has(r));
+}
+
 function renderSplitBacktest() {
   const box = document.getElementById('bt-split-result');
   if (!box) return;
@@ -510,7 +528,7 @@ function renderSplitBacktest() {
 
   const cached = getSplitBacktestResult(ticker);
   if (!cached) {
-    box.innerHTML = `<div class="bt-placeholder">아직 검증 전입니다. <strong>📊 과거 일봉으로 검증</strong>을 누르면 ${ticker} 상장 이후 일봉을 한 번 받아 이 기기에 저장합니다${getQuoteApiKey() ? ' (Twelve Data 1회 조회)' : ''}.</div>`;
+    box.innerHTML = `<div class="bt-placeholder">아직 검증 전입니다. <strong>과거 일봉으로 검증</strong>을 누르면 ${ticker} 상장 이후 일봉을 한 번 받아 이 기기에 저장합니다${getQuoteApiKey() ? ' (Twelve Data 1회 조회)' : ''}.</div>`;
     return;
   }
   const { result, history } = cached;
@@ -523,7 +541,8 @@ function renderSplitBacktest() {
   const p = all.plain;
   const boosterWorseYears = result.rows.filter(r => r.booster.cagr < r.plain.cagr).length;
   const cagrs = result.rows.map(r => r.plain.cagr);
-  const rowsHTML = result.rows.map(r => {
+  const coreRows = splitCoreRows(result.rows);
+  const rowsHTML = (isTableExpanded('split-bt') ? result.rows : coreRows).map(r => {
     const best = Math.max(r.plain.cagr, r.booster.cagr, r.plain.holdCagr);
     const cell = v => `<td${v === best ? ' class="bt-best"' : ''}>${formatBtSignedPct(v)}</td>`;
     return `
@@ -567,14 +586,15 @@ function renderSplitBacktest() {
             <th>40분할 연복리</th>
             <th>+ RSI 부스터</th>
             <th>그냥 보유</th>
-            <th>최대 낙폭 (40분할 / 보유)</th>
-            <th>졸업 횟수/년 · 1회 수익</th>
-            <th>최장 갇힘</th>
+            <th class="col-opt">최대 낙폭 (40분할 / 보유)</th>
+            <th class="col-opt">졸업 횟수/년 · 1회 수익</th>
+            <th class="col-opt">최장 갇힘</th>
           </tr>
         </thead>
         <tbody>${rowsHTML}</tbody>
       </table>
     </div>
+    ${tableMoreHTML('split-bt', result.rows.length, coreRows.length)}
     <div class="bt-notes">
       <div>각 행은 그 해 첫 거래일에 시작해 데이터 끝(${result.to})까지 운용한 결과입니다. 데이터 끝에 아직 갇혀 있는 사이클은 평가손익으로 계산합니다.</div>
       <div>${btDataLine(history)} · 수수료 편도 0.1%, LOC는 종가 체결, 소수점 수량, 양도세 22% 미반영. 2010년 이후는 기술주 강세장이었고 과거 결과가 미래를 보장하지 않습니다.</div>

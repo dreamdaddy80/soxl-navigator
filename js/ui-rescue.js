@@ -69,7 +69,7 @@ function runSimulator(recalcBuyPriceFromDrop = true, sync = true) {
   document.getElementById('sim-rebuy-shares').textContent = `${rebuyWholeShares.toLocaleString()}주 (잔여 ${formatUSD(leftoverCash)})`;
   document.getElementById('sim-free-shares').textContent =
     freeSharesGained >= 0
-      ? `+${freeSharesGained.toLocaleString()}주 증가! 🎉`
+      ? `+${freeSharesGained.toLocaleString()}주 증가`
       : `${freeSharesGained}주 감소 (매도가보다 낮게 사야 합니다)`;
 
   document.getElementById('res-before-shares').textContent = `${totalShares.toLocaleString()}주`;
@@ -79,7 +79,11 @@ function runSimulator(recalcBuyPriceFromDrop = true, sync = true) {
   document.getElementById('res-before-target').textContent = formatUSD(oldBreakevenPrice);
   document.getElementById('res-after-target').textContent = formatUSD(newBreakevenPrice);
   const priceDropDiff = oldBreakevenPrice - newBreakevenPrice;
-  document.getElementById('res-target-diff').innerHTML = `본전 탈출 기준선 <strong>-${formatUSD(priceDropDiff)}</strong> 단축!`;
+  document.getElementById('res-target-diff').innerHTML = `본전 기준선 <strong>${formatSignedUSD(-priceDropDiff)}</strong>`;
+  document.getElementById('concl-rescue-sim').innerHTML =
+    `두 주문이 모두 체결되면 본전 <strong>${formatUSD(oldBreakevenPrice)} → ${formatUSD(newBreakevenPrice)}</strong>, 주식 ${totalShares.toLocaleString()}주 → ${newTotalShares.toLocaleString()}주`;
+  syncPresetButtons('sell-ratio-presets', sellRatio);
+  syncPresetButtons('drop-ratio-presets', effectiveDropPct);
 
   const tbody = document.getElementById('roadmap-tbody');
   tbody.innerHTML = '';
@@ -109,9 +113,9 @@ function runSimulator(recalcBuyPriceFromDrop = true, sync = true) {
     tr.innerHTML = `
       <td><strong>${cycle}회전 성공 시</strong></td>
       <td><strong>${simLoopShares.toLocaleString()}주</strong> <small style="color:var(--text-muted);">(${formatUSD(simLoopCash)})</small></td>
-      <td style="color: var(--accent-green);">${formatShareDelta(addedShares)}</td>
-      <td><strong style="color: var(--accent-blue);">${formatUSD(cycleTargetPrice)}</strong></td>
-      <td>기존 대비 <strong>-${formatUSD(savedTarget)}</strong> 단축</td>
+      <td>${formatShareDelta(addedShares)}</td>
+      <td><strong>${formatUSD(cycleTargetPrice)}</strong></td>
+      <td>기존 대비 <strong>${formatSignedUSD(-savedTarget)}</strong></td>
     `;
     tbody.appendChild(tr);
   }
@@ -130,4 +134,5 @@ function fillFromSimulator() {
   document.getElementById('log-price').value = sellPrice;
   document.getElementById('log-shares').value = sellShares;
   document.getElementById('log-memo').value = `목표 재매수가: $${buyPrice} 이하`;
+  toggleLogTypeHint();
 }

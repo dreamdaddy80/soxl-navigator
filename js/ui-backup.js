@@ -6,7 +6,7 @@ function copyBackupCode() {
     const code = btoa(encodeURIComponent(JSON.stringify(appState)));
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(code).then(() => {
-        alert('✅ 백업 코드가 클립보드에 복사되었습니다!\n카카오톡 [나에게 보내기]나 메모장에 붙여넣은 뒤, 스마트폰에서 [📥 코드 복원]을 눌러 붙여넣으시면 모든 기록이 즉시 동기화됩니다.');
+        alert('✅ 백업 코드가 클립보드에 복사되었습니다!\n카카오톡 [나에게 보내기]나 메모장에 붙여넣은 뒤, 다른 기기의 설정 > 백업 코드 복원에 붙여넣으면 모든 기록이 즉시 동기화됩니다.');
       }).catch(() => {
         prompt('아래 백업 코드를 복사(Ctrl+C)해서 스마트폰에 붙여넣으세요:', code);
       });
