@@ -2731,3 +2731,45 @@ tbody tr:hover td {
 .bt-alt-section .bt-table td:first-child {
   min-width: 170px;
 }
+
+/* 회전 시나리오 카드 */
+.scenario-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 760px) {
+  .scenario-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.scenario-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: #ffffff;
+  line-height: 1.55;
+  font-size: 0.86rem;
+}
+
+.scenario-good { border-left: 5px solid var(--accent-green); }
+.scenario-bad { border-left: 5px solid var(--accent-red); }
+.scenario-warn { border-left: 5px solid #d97706; }
+.scenario-neutral { border-left: 5px solid #94a3b8; }
+
+.scenario-title {
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.scenario-odds {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}

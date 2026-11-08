@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SOXL · TQQQ 올인원 투자 네비게이터</title>
-  <link rel="stylesheet" href="styles.css?v=20261108-11" />
+  <link rel="stylesheet" href="styles.css?v=20261108-12" />
   <!-- TradingView Widget Script -->
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 </head>
@@ -535,6 +535,14 @@
         </div>
         <div class="card">
           <div class="card-header">
+            <h2>🧭 계획대로 안 되면? 시나리오별 결과</h2>
+          </div>
+          <p class="bt-intro">위 시뮬레이터는 매도와 재매수가 모두 체결된 경우만 보여줍니다. 실제로는 아래 네 갈래 중 하나가 됩니다. 숫자는 위 시뮬레이터 설정과 내 보유 현황으로 계산합니다.</p>
+          <div id="scenario-result"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
             <h2>🧪 과거 검증: 이 회전 규칙이 실제로 통했나?</h2>
             <button type="button" class="btn-secondary" onclick="runRotationBacktest()">📊 과거 일봉으로 검증</button>
           </div>
@@ -849,7 +857,7 @@
     </div>
   </div>
 
-  <script src="backtest.js?v=20261108-11"></script>
-  <script src="app.js?v=20261108-11"></script>
+  <script src="backtest.js?v=20261108-12"></script>
+  <script src="app.js?v=20261108-12"></script>
 </body>
 </html>

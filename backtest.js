@@ -194,6 +194,83 @@ function btRotationStudy(bars, opts) {
 }
 
 // -------------------------------------------------------------------------
+// 회전 1번의 단계별 발생 빈도: 매도가 체결됐나 → 재매수가 언제 체결됐나 → 재매수 뒤 더 빠졌나
+// 시작일 종가 기준으로 매도가(+up)를 걸고, 체결되면 매도가×(1-drop)에 재매수를 건다.
+// -------------------------------------------------------------------------
+function btRotationOdds(bars, opts) {
+  const { up, drop } = opts;
+  const window = BT_YEAR_BARS;
+  const starts = btStartIndices(bars, opts.crashDrawdown || 0, window);
+  let sold60 = 0;
+  let sold252 = 0;
+  let soldTotal = 0;
+  let rebuy20 = 0;
+  let rebuy60 = 0;
+  let rebuy252 = 0;
+  let rebuyChecked = 0;
+  let rebought = 0;
+  let deeper10 = 0;
+  let deeper20 = 0;
+  const runUps = [];
+  const rebuyDays = [];
+
+  starts.forEach(s => {
+    const sellAt = bars[s].c * (1 + up);
+    let sellIdx = -1;
+    for (let i = s + 1; i <= s + window; i++) {
+      if (bars[i].h >= sellAt) { sellIdx = i; break; }
+    }
+    if (sellIdx < 0) return;
+    if (sellIdx - s <= 60) sold60++;
+    sold252++;
+    if (sellIdx + window > bars.length - 1) return; // 재매수를 1년 지켜볼 데이터가 없는 경우 제외
+    soldTotal++;
+
+    const sellPx = Math.max(bars[sellIdx].o, sellAt);
+    const buyAt = sellPx * (1 - drop);
+    let buyIdx = -1;
+    let high = sellPx;
+    for (let i = sellIdx + 1; i <= sellIdx + window; i++) {
+      if (bars[i].l <= buyAt) { buyIdx = i; break; }
+      high = Math.max(high, bars[i].h);
+    }
+    rebuyChecked++;
+    if (buyIdx < 0) {
+      runUps.push(high / sellPx - 1); // 1년 내내 재매수가 안 온 동안 매도가 위로 얼마나 올랐나
+      return;
+    }
+    const days = buyIdx - sellIdx;
+    rebuyDays.push(days);
+    if (days <= 20) rebuy20++;
+    if (days <= 60) rebuy60++;
+    rebuy252++;
+
+    if (buyIdx + 60 > bars.length - 1) return;
+    rebought++;
+    const buyPx = Math.min(bars[buyIdx].o, buyAt);
+    let low = buyPx;
+    for (let i = buyIdx + 1; i <= buyIdx + 60; i++) low = Math.min(low, bars[i].l);
+    if (low <= buyPx * 0.9) deeper10++;
+    if (low <= buyPx * 0.8) deeper20++;
+  });
+
+  return {
+    n: starts.length,
+    sellFill60Pct: btPct(sold60, starts.length),
+    sellFill252Pct: btPct(sold252, starts.length),
+    soldCount: rebuyChecked,
+    rebuy20Pct: btPct(rebuy20, rebuyChecked),
+    rebuy60Pct: btPct(rebuy60, rebuyChecked),
+    rebuy252Pct: btPct(rebuy252, rebuyChecked),
+    medianRebuyDays: btMedian(rebuyDays),
+    medianRunUpWhenMissed: btMedian(runUps),
+    reboughtCount: rebought,
+    deeper10Pct: btPct(deeper10, rebought),
+    deeper20Pct: btPct(deeper20, rebought)
+  };
+}
+
+// -------------------------------------------------------------------------
 // 대안 규칙 비교: 같은 시작점에서 2년 동안 여러 규칙의 자산 경로(시작 = 1)를 만들어 비교
 // bars에는 같은 날짜의 1배 ETF 종가 u가 붙어 있어야 한다 (btAlignWithBase)
 // -------------------------------------------------------------------------
@@ -482,5 +559,5 @@ function btSplitStudy(bars, opts) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { btMedian, btRsiSeries, btBollingerLowerSeries, btRotationRun, btRotationStudy, btAlternativesStudy, btSplitSim, btSplitStudy };
+  module.exports = { btMedian, btRsiSeries, btBollingerLowerSeries, btRotationRun, btRotationStudy, btRotationOdds, btAlternativesStudy, btSplitSim, btSplitStudy };
 }

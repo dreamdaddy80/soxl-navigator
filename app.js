@@ -2,6 +2,8 @@
 const TRADING_FEE_RATE = 0.001; // 편도 0.1% (왕복 0.2% 실전 증권사 수수료·SEC 제비용 반영)
 const QUOTE_STALE_MS = 10 * 60 * 1000; // 마지막 시세 확인 후 10분이 지나면 추천 행동을 보류
 const QUOTE_TIMEOUT_MS = 15000; // 무료 프록시 응답 대기 한도
+const OVERSEAS_GAINS_TAX_RATE = 0.22; // 해외주식 양도소득세 (지방세 포함)
+const OVERSEAS_GAINS_DEDUCTION_KRW = 2500000; // 연간 기본공제
 
 const DEFAULT_STATE = {
   currentTicker: 'SOXL',
@@ -1610,12 +1612,16 @@ function renderGrowthCompoundAndHistory() {
   const oneCycleProfit = g.totalBudget * avgCycleYield;
   const oneYearAsset = g.totalBudget * (useBt ? 1 + btAll.cagr : Math.pow(1 + avgCycleYield, cyclesPerYear));
   const oneYearProfit = oneYearAsset - g.totalBudget;
+  // 해외주식 양도소득세: 한 해 순이익에서 250만 원을 뺀 금액의 22% (그해 다른 해외주식 손익과 합산)
+  const fxRate = appState.exchangeRate || 1400;
+  const oneYearTax = Math.max(0, oneYearProfit * fxRate - OVERSEAS_GAINS_DEDUCTION_KRW) * OVERSEAS_GAINS_TAX_RATE / fxRate;
+  const oneYearAfterTax = oneYearProfit - oneYearTax;
 
   const summaryBox = document.getElementById('g-compound-summary');
   if (summaryBox) {
     const caveat = useBt
-      ? `🧪 상장 초부터 과거 일봉으로 검증한 평균입니다 (1년 값은 실제 연복리 ${formatBtSignedPct(btAll.cagr)} 기준). 같은 기간 최대 낙폭 ${formatBtSignedPct(btAll.mdd, 0)}, 시드를 다 쓰고 최장 ${btAll.maxStuckDays.toLocaleString()}거래일 갇힌 구간이 있었습니다. 양도소득세(22%)·환전 비용은 반영되지 않았습니다.`
-      : `⚠️ 앱 기본 가정치입니다 (매 사이클 시드 55% 소진 후 +${g.targetProfitPct}% 졸업, 연 6회 전부 성공). 위 <strong>🧪 과거 검증</strong>을 실행하면 실제 과거 평균으로 바뀝니다. 실패·장기 물림 사이클, 양도소득세(22%), 환전 비용은 반영되지 않았습니다.`;
+      ? `🧪 상장 초부터 과거 일봉으로 검증한 평균입니다 (1년 값은 실제 연복리 ${formatBtSignedPct(btAll.cagr)} 기준). 같은 기간 최대 낙폭 ${formatBtSignedPct(btAll.mdd, 0)}, 시드를 다 쓰고 최장 ${btAll.maxStuckDays.toLocaleString()}거래일 갇힌 구간이 있었습니다. 세후 금액은 1년 수익을 모두 실현했고 그해 다른 해외주식 손익이 없다고 보고 '(이익 − 250만 원) × 22%'로 어림한 값입니다. 환전 비용은 반영되지 않았습니다.`
+      : `⚠️ 앱 기본 가정치입니다 (매 사이클 시드 55% 소진 후 +${g.targetProfitPct}% 졸업, 연 6회 전부 성공). 위 <strong>🧪 과거 검증</strong>을 실행하면 실제 과거 평균으로 바뀝니다. 실패·장기 물림 사이클과 환전 비용은 반영되지 않았고, 세후 금액은 '(이익 − 250만 원) × 22%'로 어림한 값입니다.`;
     summaryBox.innerHTML = `
       <div class="diag-item">
         <span class="diag-label">졸업 1회 평균 순수익 ${useBt ? '(과거 평균)' : '(가정치)'}</span>
@@ -1625,7 +1631,7 @@ function renderGrowthCompoundAndHistory() {
       <div class="diag-item">
         <span class="diag-label">1년(약 ${cyclesPerYear.toFixed(1)}회 졸업) 운영 시 순수익 ${useBt ? '(과거 연복리)' : '(가정치)'}</span>
         <strong class="diag-value" style="color:var(--accent-blue);">${formatSignedUSD(oneYearProfit)}</strong>
-        <span class="diag-sub">${formatKRW(oneYearProfit)}</span>
+        <span class="diag-sub">${formatKRW(oneYearProfit)} · 세후 약 <strong>${formatSignedUSD(oneYearAfterTax)}</strong> (양도세 ${formatUSD(oneYearTax)})</span>
       </div>
       <div class="diag-item highlight-diag">
         <span class="diag-label">1년 뒤 총 자산 (원금+수익)</span>
@@ -1725,7 +1731,7 @@ const BT_HISTORY_STORAGE_PREFIX = 'bt_history_v1_'; // 백업 코드에 넣지 �
 const BT_HISTORY_TTL_MS = 12 * 60 * 60 * 1000;
 const BT_HISTORY_TIMEOUT_MS = 30000;
 const btHistory = {}; // ticker → { at, source, bars }
-const btResults = { rotation: {}, alternatives: {}, split: {} }; // ticker → { key, result }
+const btResults = { rotation: {}, odds: {}, alternatives: {}, split: {} }; // ticker → { key, result }
 const BT_BASE_TICKER = { SOXL: 'SOXX', TQQQ: 'QQQ' }; // 대안 비교용 같은 지수의 1배 ETF
 const btLoading = {};
 let btRotationTimer = null;
@@ -1851,6 +1857,139 @@ async function runBacktestWithHistory(kind, allowNetwork) {
 
 function runRotationBacktest() {
   runBacktestWithHistory('rotation', true);
+}
+
+// 회전 1번이 갈 수 있는 네 갈래(계획대로 / 팔고 계속 오름 / 재매수 뒤 더 빠짐 / 매도 미체결)를 같은 숫자로 보여준다
+function renderRotationScenarios(p) {
+  const box = document.getElementById('scenario-result');
+  if (!box) return;
+  const ticker = appState.currentTicker;
+  const t = appState.tickers[ticker];
+  ensurePrincipalAnchor(t);
+  const cur = t.currentPrice;
+  const shares = t.shares;
+  const cash = t.reservedCash || 0;
+  const principal = getTotalPrincipal(t) || (shares * t.avgPrice);
+  const sellPrice = parseFloat(document.getElementById('sim-sell-price').value) || t.autoSellTarget1 || cur;
+  const buyPrice = parseFloat(document.getElementById('sim-buy-price').value) || sellPrice * (1 - p.drop);
+  if (!(shares > 0 && cur > 0 && sellPrice > 0 && buyPrice > 0)) {
+    box.innerHTML = `<div class="bt-placeholder">보유 주식과 현재가가 있어야 시나리오를 계산할 수 있습니다.</div>`;
+    return;
+  }
+
+  const sold = Math.round(shares * p.ratio);
+  const cashSecured = sold * sellPrice * (1 - TRADING_FEE_RATE);
+  const rebuy = Math.floor(cashSecured / (buyPrice * (1 + TRADING_FEE_RATE)));
+  const leftover = cashSecured - rebuy * buyPrice * (1 + TRADING_FEE_RATE);
+  const paths = {
+    hold: { shares, cash },
+    plan: { shares: shares - sold + rebuy, cash: cash + leftover },
+    soldOnly: { shares: shares - sold, cash: cash + cashSecured }
+  };
+  const breakevenOf = x => x.shares > 0 ? Math.max(0, principal - x.cash) / x.shares : 0;
+  const valueAt = (x, price) => x.shares * price + x.cash;
+  const beHold = breakevenOf(paths.hold);
+  const bePlan = breakevenOf(paths.plan);
+  const beSoldOnly = breakevenOf(paths.soldOnly);
+  const deeperPrice = buyPrice * 0.8;
+  const missAtBreakeven = valueAt(paths.hold, beHold) - valueAt(paths.soldOnly, beHold);
+
+  // 과거 발생 빈도 (과거 검증의 '시작 시점' 설정을 따른다)
+  const history = readBacktestHistoryCache(ticker);
+  const up = sellPrice / cur - 1;
+  const drop = 1 - buyPrice / sellPrice;
+  let odds = null;
+  if (history && up > 0 && drop > 0) {
+    const key = JSON.stringify([history.at, up.toFixed(4), drop.toFixed(4), p.crashOnly]);
+    let cached = btResults.odds[ticker];
+    if (!cached || cached.key !== key) {
+      cached = { key, result: btRotationOdds(history.bars, { up, drop, crashDrawdown: p.crashOnly ? 0.45 : 0 }) };
+      btResults.odds[ticker] = cached;
+    }
+    odds = cached.result.n ? cached.result : null;
+  }
+  const oddsHint = history
+    ? '매도가가 현재가보다 높고 재매수가가 매도가보다 낮아야 과거 빈도를 셀 수 있습니다.'
+    : '과거 빈도는 아래 🧪 과거 검증에서 일봉을 받으면 표시됩니다.';
+
+  const scenarios = [
+    {
+      cls: 'scenario-good',
+      title: '✅ 계획대로: 매도 → 재매수 체결',
+      body: `주식 ${shares.toLocaleString()}주 → <strong>${paths.plan.shares.toLocaleString()}주</strong>, 본전 주가 ${formatUSD(beHold)} → <strong>${formatUSD(bePlan)}</strong>`,
+      odds: odds && `팔고 나서 20거래일 안에 재매수가 체결된 경우 ${formatBtPct(odds.rebuy20Pct)}, 60거래일 안 ${formatBtPct(odds.rebuy60Pct)}`
+    },
+    {
+      cls: 'scenario-bad',
+      title: '⚠️ 팔고 나서 계속 오름: 재매수 못 함',
+      body: `${paths.soldOnly.shares.toLocaleString()}주 + 현금 ${formatUSD(paths.soldOnly.cash)}로 남아 본전 주가가 ${formatUSD(beHold)} → <strong>${formatUSD(beSoldOnly)}</strong>로 <strong>올라갑니다.</strong> 주가가 ${formatUSD(beHold)}까지 그대로 오르면 그냥 보유보다 <strong>${formatUSD(missAtBreakeven)}</strong> 적습니다.`,
+      odds: odds && `1년이 지나도 재매수가 안 온 경우 ${formatBtPct(100 - odds.rebuy252Pct)}${odds.medianRunUpWhenMissed != null ? ` · 그동안 주가는 매도가보다 중앙값 ${formatBtSignedPct(odds.medianRunUpWhenMissed, 0)}까지 올랐습니다` : ''}`
+    },
+    {
+      cls: 'scenario-warn',
+      title: '📉 재매수 뒤 더 빠짐',
+      body: `재매수가(${formatUSD(buyPrice)})에서 -20% 더 빠져 ${formatUSD(deeperPrice)}가 되면 평가액 ${formatUSD(valueAt(paths.plan, deeperPrice))} (그냥 보유 ${formatUSD(valueAt(paths.hold, deeperPrice))}). 회전을 마친 뒤의 하락은 보유보다 불리하지 않지만, 재매수가가 바닥이라는 뜻도 아닙니다.`,
+      odds: odds && `재매수 후 60거래일 안에 -10% 넘게 더 빠진 경우 ${formatBtPct(odds.deeper10Pct)}, -20% 넘게 ${formatBtPct(odds.deeper20Pct)}`
+    },
+    {
+      cls: 'scenario-neutral',
+      title: '🔁 반등 없이 하락: 매도 미체결',
+      body: `매도가(${formatUSD(sellPrice)})에 닿지 않으면 아무 주문도 체결되지 않아 그냥 보유와 같습니다.`,
+      odds: odds && `60거래일 안에 매도가에 닿은 경우 ${formatBtPct(odds.sellFill60Pct)}, 1년 안 ${formatBtPct(odds.sellFill252Pct)}`
+    }
+  ];
+
+  const labelled = [
+    [deeperPrice, '재매수가 -20%'],
+    [buyPrice, '재매수가'],
+    [cur, '현재가'],
+    [sellPrice, '매도가'],
+    [sellPrice * 1.3, '매도가 +30%'],
+    [beHold, '지금 본전']
+  ];
+  const grid = new Map();
+  labelled.forEach(([price, label]) => {
+    const key = Number(price.toFixed(2));
+    if (!(key > 0)) return;
+    grid.set(key, [...(grid.get(key) || []), label]);
+  });
+  const rowsHTML = [...grid.keys()].sort((a, b) => a - b).map(price => {
+    const vals = [valueAt(paths.hold, price), valueAt(paths.plan, price), valueAt(paths.soldOnly, price)];
+    const best = Math.max(...vals.map(v => Math.round(v)));
+    return `
+      <tr>
+        <td><strong>${formatUSD(price)}</strong><br/><small class="bt-rule-desc">${grid.get(price).join(' · ')}</small></td>
+        ${vals.map(v => `<td${Math.round(v) === best ? ' class="bt-best"' : ''}>${formatUSD(v)}</td>`).join('')}
+      </tr>`;
+  }).join('');
+
+  box.innerHTML = `
+    <div class="scenario-grid">
+      ${scenarios.map(sc => `
+        <div class="scenario-item ${sc.cls}">
+          <strong class="scenario-title">${sc.title}</strong>
+          <span class="scenario-body">${sc.body}</span>
+          <span class="scenario-odds">📊 ${sc.odds || oddsHint}</span>
+        </div>`).join('')}
+    </div>
+    <div class="table-responsive">
+      <table class="bt-table">
+        <thead>
+          <tr>
+            <th>그 뒤 주가</th>
+            <th>그냥 보유</th>
+            <th>계획대로 회전한 뒤</th>
+            <th>팔고 재매수 못 한 채</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHTML}</tbody>
+      </table>
+    </div>
+    <div class="bt-notes">
+      <div>금액은 그 가격에서의 총 평가액(주식 + 현금)입니다. '계획대로 회전한 뒤'는 재매수가까지 내려갔다가 그 가격이 된 경우입니다. 초록색은 그 가격에서 가장 큰 값입니다.</div>
+      <div>${odds ? `과거 빈도는 ${ticker} 일봉의 시작점 ${odds.n.toLocaleString()}일(${p.crashOnly ? '폭락 후' : '모든 거래일'} · 아래 과거 검증의 '시작 시점' 설정)에서 지금과 같은 비율(+${(up * 100).toFixed(1)}% 매도, 매도가 -${(drop * 100).toFixed(1)}% 재매수)로 센 값입니다. ` : ''}과거 빈도가 앞으로의 확률을 보장하지 않습니다.</div>
+    </div>
+  `;
 }
 
 // 대안 비교는 1배 ETF 일봉도 필요하다 (Twelve Data 키가 있으면 최대 2회 조회)
@@ -1992,6 +2131,7 @@ function renderRotationBacktest() {
   const ruleText = `규칙: 현재가 대비 <strong>+${(p.up * 100).toFixed(1)}%</strong> 반등에 보유의 <strong>${Math.round(p.ratio * 100)}%</strong> 매도 → 매도가 대비 <strong>-${(p.drop * 100).toFixed(1)}%</strong>에 재매수` +
     (p.timeout ? ` (재매수가 ${p.timeout}거래일 안 오면 그날 종가에 재매수)` : ' (재매수가 올 때까지 대기 · 앱 기본 규칙)');
   document.getElementById('bt-rot-rule').innerHTML = ruleText;
+  renderRotationScenarios(p);
   renderAlternativesBacktest(p);
 
   const history = btHistory[ticker] || readBacktestHistoryCache(ticker);
