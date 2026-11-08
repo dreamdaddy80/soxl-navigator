@@ -1725,7 +1725,8 @@ const BT_HISTORY_STORAGE_PREFIX = 'bt_history_v1_'; // 백업 코드에 넣지 �
 const BT_HISTORY_TTL_MS = 12 * 60 * 60 * 1000;
 const BT_HISTORY_TIMEOUT_MS = 30000;
 const btHistory = {}; // ticker → { at, source, bars }
-const btResults = { rotation: {}, split: {} }; // ticker → { key, result }
+const btResults = { rotation: {}, alternatives: {}, split: {} }; // ticker → { key, result }
+const BT_BASE_TICKER = { SOXL: 'SOXX', TQQQ: 'QQQ' }; // 대안 비교용 같은 지수의 1배 ETF
 const btLoading = {};
 let btRotationTimer = null;
 
@@ -1852,6 +1853,110 @@ function runRotationBacktest() {
   runBacktestWithHistory('rotation', true);
 }
 
+// 대안 비교는 1배 ETF 일봉도 필요하다 (Twelve Data 키가 있으면 최대 2회 조회)
+async function runAlternativesBacktest() {
+  const ticker = appState.currentTicker;
+  const base = BT_BASE_TICKER[ticker];
+  const box = document.getElementById('bt-alt-result');
+  const loadingKey = `${ticker}:alt`;
+  if (!box || btLoading[loadingKey]) return;
+  btLoading[loadingKey] = true;
+  box.innerHTML = `<div class="bt-placeholder">⏳ ${ticker}·${base} 상장 이후 일봉을 받아오는 중입니다... (최대 1분)</div>`;
+  try {
+    await loadBacktestHistory(ticker, true);
+    await loadBacktestHistory(base, true);
+    if (ticker !== appState.currentTicker) return;
+    renderRotationBacktest();
+  } catch (e) {
+    if (ticker === appState.currentTicker) {
+      box.innerHTML = `<div class="bt-placeholder bt-error">⚠️ 과거 일봉을 받지 못했습니다: ${escapeHTML(e.message)}</div>`;
+    }
+  } finally {
+    btLoading[loadingKey] = false;
+  }
+}
+
+function renderAlternativesBacktest(p) {
+  const box = document.getElementById('bt-alt-result');
+  if (!box) return;
+  const ticker = appState.currentTicker;
+  const base = BT_BASE_TICKER[ticker];
+  document.getElementById('bt-alt-intro').innerHTML =
+    `같은 시작점에서 2년 동안 여러 규칙을 돌려 봅니다. 1배 ETF는 <strong>${base}</strong>입니다. 본전에 빨리 가는 쪽과 추가 하락을 덜 맞는 쪽 중 무엇을 얻고 무엇을 내주는지 비교해 보세요.`;
+
+  const history = readBacktestHistoryCache(ticker);
+  const baseHistory = readBacktestHistoryCache(base);
+  if (!history || !baseHistory) {
+    box.innerHTML = `<div class="bt-placeholder"><strong>📊 대안과 비교</strong>를 누르면 ${history ? '' : `${ticker}와 `}${base} 일봉을 받아 비교합니다${getQuoteApiKey() ? ` (Twelve Data ${history ? 1 : 2}회 조회)` : ''}.</div>`;
+    return;
+  }
+
+  const crashDrawdown = p.crashOnly ? 0.45 : 0;
+  const key = JSON.stringify([history.at, baseHistory.at, p.up, p.drop, p.ratio, crashDrawdown, p.breakevenMultiple.toFixed(3)]);
+  let cached = btResults.alternatives[ticker];
+  if (!cached || cached.key !== key) {
+    cached = {
+      key,
+      result: btAlternativesStudy(history.bars, baseHistory.bars, {
+        up: p.up, drop: p.drop, ratio: p.ratio, crashDrawdown, breakevenMultiple: p.breakevenMultiple
+      })
+    };
+    btResults.alternatives[ticker] = cached;
+  }
+  const r = cached.result;
+  if (!r.n) {
+    box.innerHTML = `<div class="bt-placeholder">2년 이상 지난 시작점이 없어 비교할 수 없습니다.</div>`;
+    return;
+  }
+
+  const withBreakeven = r.breakevenMultiple > 0;
+  // 화면에 보이는 자릿수로 반올림해 비교해야 같은 값으로 보이는 칸이 함께 강조된다
+  const shown = {
+    breakevenPct: v => Math.round(v),
+    medianBreakevenDays: v => Math.round(v),
+    medianDrawdown: v => Math.round(v * 100)
+  };
+  const bestOf = (key, pick) => pick(...r.rules.map(x => x[key]).filter(v => v != null).map(shown[key]));
+  const bestReach = withBreakeven ? bestOf('breakevenPct', Math.max) : null;
+  const bestDays = withBreakeven ? bestOf('medianBreakevenDays', Math.min) : null;
+  const bestDd = bestOf('medianDrawdown', Math.max);
+  const mark = (key, v, best, text) => `<td${v != null && shown[key](v) === best ? ' class="bt-best"' : ''}>${text}</td>`;
+  const vsHold = (rule, ratio) => rule.id === 'hold' ? '기준' : formatBtSignedPct(ratio - 1);
+
+  const rowsHTML = r.rules.map(x => `
+    <tr>
+      <td><strong>${x.label}</strong><br/><small class="bt-rule-desc">${x.desc}</small></td>
+      <td>${vsHold(x, x.ratio1y)}</td>
+      <td>${vsHold(x, x.ratio2y)}</td>
+      <td>${x.id === 'hold' ? '-' : formatBtPct(x.beat2yPct)}</td>
+      ${withBreakeven ? mark('breakevenPct', x.breakevenPct, bestReach, formatBtPct(x.breakevenPct)) : ''}
+      ${withBreakeven ? mark('medianBreakevenDays', x.medianBreakevenDays, bestDays, x.medianBreakevenDays == null ? '-' : `${Math.round(x.medianBreakevenDays)}일`) : ''}
+      ${mark('medianDrawdown', x.medianDrawdown, bestDd, `${formatBtSignedPct(x.medianDrawdown, 0)} / ${formatBtSignedPct(x.worstDrawdown, 0)}`)}
+    </tr>`).join('');
+
+  box.innerHTML = `
+    <div class="table-responsive">
+      <table class="bt-table">
+        <thead>
+          <tr>
+            <th>규칙</th>
+            <th>1년 뒤 자산 (보유 대비)</th>
+            <th>2년 뒤 자산 (보유 대비)</th>
+            <th>2년 뒤 보유보다 나은 비율</th>
+            ${withBreakeven ? `<th>2년 안 본전(+${((r.breakevenMultiple - 1) * 100).toFixed(0)}%) 도달</th><th>도달까지 거래일 (중앙값)</th>` : ''}
+            <th>시작 후 추가 낙폭 (중앙값 / 최악)</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHTML}</tbody>
+      </table>
+    </div>
+    <div class="bt-notes">
+      <div>자산 비율은 중앙값입니다. 초록색은 그 열에서 가장 나은 값입니다. 시작점 ${r.n.toLocaleString()}일 (${r.from} ~ ${r.to}, 끝까지 2년이 남은 날만).</div>
+      <div>200일선 규칙은 전일 종가로 판단해 그날 종가에 옮긴다고 가정했고, 옮길 때마다 매도·매수 수수료(편도 0.1%)를 뺐습니다. 세금은 반영하지 않았습니다. 과거에는 폭락이 모두 회복해 보유가 유리했지만, 이번에도 회복한다는 보장은 없습니다.</div>
+    </div>
+  `;
+}
+
 function runSplitBacktest() {
   runBacktestWithHistory('split', true);
 }
@@ -1887,6 +1992,7 @@ function renderRotationBacktest() {
   const ruleText = `규칙: 현재가 대비 <strong>+${(p.up * 100).toFixed(1)}%</strong> 반등에 보유의 <strong>${Math.round(p.ratio * 100)}%</strong> 매도 → 매도가 대비 <strong>-${(p.drop * 100).toFixed(1)}%</strong>에 재매수` +
     (p.timeout ? ` (재매수가 ${p.timeout}거래일 안 오면 그날 종가에 재매수)` : ' (재매수가 올 때까지 대기 · 앱 기본 규칙)');
   document.getElementById('bt-rot-rule').innerHTML = ruleText;
+  renderAlternativesBacktest(p);
 
   const history = btHistory[ticker] || readBacktestHistoryCache(ticker);
   if (!history) {

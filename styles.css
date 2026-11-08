@@ -2709,3 +2709,25 @@ tbody tr:hover td {
   line-height: 1.55;
   color: var(--text-muted);
 }
+
+.bt-alt-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.bt-alt-section h3 {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.bt-rule-desc {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 0.74rem;
+}
+
+.bt-alt-section .bt-table td:first-child {
+  min-width: 170px;
+}

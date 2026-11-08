@@ -54,6 +54,21 @@ function btBollingerLowerSeries(closes, period = 20, mult = 2) {
   return out;
 }
 
+// 시작점 후보: 상장 1년 뒤부터, 끝까지 minRemaining거래일 이상 남은 날
+// crashDrawdown > 0이면 직전 1년 최고 종가 대비 그만큼 이상 떨어진 날만
+function btStartIndices(bars, crashDrawdown, minRemaining) {
+  const starts = [];
+  for (let s = BT_YEAR_BARS; s <= bars.length - 1 - minRemaining; s++) {
+    if (crashDrawdown > 0) {
+      let high = 0;
+      for (let k = s - BT_YEAR_BARS; k < s; k++) if (bars[k].c > high) high = bars[k].c;
+      if (bars[s].c > high * (1 - crashDrawdown)) continue;
+    }
+    starts.push(s);
+  }
+  return starts;
+}
+
 // -------------------------------------------------------------------------
 // 원금 탈출 회전: start일 종가에 1000주를 들고 시작
 //   SELL 대기: 고가가 기준가×(1+up)에 닿으면 ratio만큼 매도
@@ -119,15 +134,7 @@ function btRotationStudy(bars, opts) {
   const crashDrawdown = opts.crashDrawdown || 0;
   const beMult = opts.breakevenMultiple > 1 ? opts.breakevenMultiple : 0;
 
-  const starts = [];
-  for (let s = BT_YEAR_BARS; s < bars.length - 1; s++) {
-    if (crashDrawdown > 0) {
-      let high = 0;
-      for (let k = s - BT_YEAR_BARS; k < s; k++) if (bars[k].c > high) high = bars[k].c;
-      if (bars[s].c > high * (1 - crashDrawdown)) continue;
-    }
-    starts.push(s);
-  }
+  const starts = btStartIndices(bars, crashDrawdown, 1);
 
   // 겹치는 시작일이 많으므로 60거래일 넘게 끊긴 구간을 독립 에피소드로 센다
   const episodes = [];
@@ -183,6 +190,154 @@ function btRotationStudy(bars, opts) {
       medianHoldDays: btMedian(be.holdDays),
       medianRotDays: btMedian(be.rotDays)
     } : null
+  };
+}
+
+// -------------------------------------------------------------------------
+// 대안 규칙 비교: 같은 시작점에서 2년 동안 여러 규칙의 자산 경로(시작 = 1)를 만들어 비교
+// bars에는 같은 날짜의 1배 ETF 종가 u가 붙어 있어야 한다 (btAlignWithBase)
+// -------------------------------------------------------------------------
+const BT_ALT_RULES = [
+  { id: 'hold', label: '그냥 보유', desc: '아무것도 하지 않음' },
+  { id: 'rotation', label: '앱 회전 규칙', desc: '시뮬레이터 설정 그대로, 재매수가 올 때까지 대기' },
+  { id: 'rotation20', label: '회전 + 20일 대기 한도', desc: '20거래일 안에 재매수가 안 오면 그날 종가에 재매수' },
+  { id: 'trendCash', label: '200일선 아래면 현금', desc: '전일 종가가 200일 평균 아래면 전량 팔고, 위로 올라오면 다시 매수' },
+  { id: 'trendBase', label: '200일선 아래면 1배 ETF', desc: '200일 평균 아래 구간에는 1배 ETF로 갈아탔다가 위로 올라오면 복귀' },
+  { id: 'halfBase', label: '절반을 1배 ETF로', desc: '시작일에 절반을 1배 ETF로 바꾸고 그대로 보유' },
+  { id: 'allBase', label: '전부 1배 ETF로', desc: '시작일에 전부 1배 ETF로 바꾸고 그대로 보유' }
+];
+
+function btAlignWithBase(bars, baseBars) {
+  const baseClose = new Map(baseBars.map(b => [b.d, b.c]));
+  return bars.filter(b => baseClose.has(b.d)).map(b => ({ ...b, u: baseClose.get(b.d) }));
+}
+
+function btSmaSeries(closes, period) {
+  const out = new Array(closes.length).fill(NaN);
+  let sum = 0;
+  for (let i = 0; i < closes.length; i++) {
+    sum += closes[i];
+    if (i >= period) sum -= closes[i - period];
+    if (i >= period - 1) out[i] = sum / period;
+  }
+  return out;
+}
+
+function btRotationPath(bars, s, end, opts, timeout) {
+  const { up, drop, ratio } = opts;
+  const startValue = 1000 * bars[s].c;
+  let shares = 1000;
+  let cash = 0;
+  let state = 'SELL';
+  let target = bars[s].c * (1 + up);
+  let since = s;
+  const path = [1];
+  for (let i = s + 1; i <= end; i++) {
+    const b = bars[i];
+    if (state === 'SELL' && b.h >= target) {
+      const px = Math.max(b.o, target);
+      const qty = Math.round(shares * ratio);
+      shares -= qty;
+      cash += qty * px * (1 - BT_FEE_RATE);
+      state = 'BUY';
+      target = px * (1 - drop);
+      since = i;
+    } else if (state === 'BUY' && (b.l <= target || (timeout > 0 && i - since >= timeout))) {
+      const px = b.l <= target ? Math.min(b.o, target) : b.c;
+      const qty = Math.floor(cash / (px * (1 + BT_FEE_RATE)));
+      shares += qty;
+      cash -= qty * px * (1 + BT_FEE_RATE);
+      state = 'SELL';
+      target = px * (1 + up);
+    }
+    path.push((shares * b.c + cash) / startValue);
+  }
+  return path;
+}
+
+// 레버리지·1배 ETF·현금 사이를 종가에 옮기는 규칙들 (옮길 때마다 매도·매수 수수료)
+function btSwitchPath(bars, sma200, s, end, ruleId) {
+  let lev = 1 / bars[s].c; // 시작 가치 1
+  let base = 0;
+  let cash = 0;
+  const moveToBase = (i, frac) => {
+    const v = lev * frac * bars[i].c * (1 - BT_FEE_RATE);
+    lev *= 1 - frac;
+    base += (v * (1 - BT_FEE_RATE)) / bars[i].u;
+  };
+  if (ruleId === 'halfBase') moveToBase(s, 0.5);
+  if (ruleId === 'allBase') moveToBase(s, 1);
+
+  const path = [];
+  for (let i = s; i <= end; i++) {
+    const b = bars[i];
+    if (ruleId === 'trendCash' || ruleId === 'trendBase') {
+      const above = bars[i - 1].c > sma200[i - 1];
+      if (!above && lev > 0) {
+        if (ruleId === 'trendBase') moveToBase(i, 1);
+        else { cash += lev * b.c * (1 - BT_FEE_RATE); lev = 0; }
+      } else if (above && lev === 0) {
+        const v = cash + base * b.u * (1 - BT_FEE_RATE);
+        cash = 0;
+        base = 0;
+        lev = (v * (1 - BT_FEE_RATE)) / b.c;
+      }
+    }
+    path.push(lev * b.c + base * b.u + cash);
+  }
+  return path;
+}
+
+// opts: { up, drop, ratio, crashDrawdown, breakevenMultiple }
+function btAlternativesStudy(bars, baseBars, opts) {
+  const aligned = btAlignWithBase(bars, baseBars);
+  const horizon = BT_YEAR_BARS * 2;
+  const beMult = opts.breakevenMultiple > 1 ? opts.breakevenMultiple : 0;
+  const starts = btStartIndices(aligned, opts.crashDrawdown || 0, horizon);
+  const sma200 = btSmaSeries(aligned.map(b => b.c), 200);
+
+  const stats = BT_ALT_RULES.map(rule => ({ rule, r1: [], r2: [], beat2: 0, reached: 0, days: [], dd: [] }));
+  starts.forEach(s => {
+    const end = s + horizon;
+    let holdPath = null;
+    stats.forEach(st => {
+      const id = st.rule.id;
+      const path = id === 'rotation' ? btRotationPath(aligned, s, end, opts, 0)
+        : id === 'rotation20' ? btRotationPath(aligned, s, end, opts, 20)
+          : id === 'hold' ? aligned.slice(s, end + 1).map(b => b.c / aligned[s].c)
+            : btSwitchPath(aligned, sma200, s, end, id);
+      if (id === 'hold') holdPath = path;
+      st.r1.push(path[BT_YEAR_BARS] / holdPath[BT_YEAR_BARS]);
+      st.r2.push(path[horizon] / holdPath[horizon]);
+      if (path[horizon] > holdPath[horizon] * 1.0001) st.beat2++;
+      if (beMult > 0) {
+        const k = path.findIndex(v => v >= beMult);
+        if (k >= 0) { st.reached++; st.days.push(k); }
+      }
+      let peak = 1;
+      let mdd = 0;
+      path.forEach(v => { peak = Math.max(peak, v); mdd = Math.min(mdd, v / peak - 1); });
+      st.dd.push(mdd);
+    });
+  });
+
+  return {
+    n: starts.length,
+    from: aligned.length ? aligned[0].d : null,
+    to: aligned.length ? aligned[aligned.length - 1].d : null,
+    breakevenMultiple: beMult,
+    rules: stats.map(st => ({
+      id: st.rule.id,
+      label: st.rule.label,
+      desc: st.rule.desc,
+      ratio1y: btMedian(st.r1),
+      ratio2y: btMedian(st.r2),
+      beat2yPct: btPct(st.beat2, starts.length),
+      breakevenPct: beMult > 0 ? btPct(st.reached, starts.length) : null,
+      medianBreakevenDays: btMedian(st.days),
+      medianDrawdown: btMedian(st.dd),
+      worstDrawdown: st.dd.length ? Math.min(...st.dd) : null
+    }))
   };
 }
 
@@ -327,5 +482,5 @@ function btSplitStudy(bars, opts) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { btMedian, btRsiSeries, btBollingerLowerSeries, btRotationRun, btRotationStudy, btSplitSim, btSplitStudy };
+  module.exports = { btMedian, btRsiSeries, btBollingerLowerSeries, btRotationRun, btRotationStudy, btAlternativesStudy, btSplitSim, btSplitStudy };
 }
