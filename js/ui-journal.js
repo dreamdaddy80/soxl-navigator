@@ -117,6 +117,7 @@ function deleteLog(id) {
 }
 
 function renderLogs() {
+  renderJournalAnalytics();
   const t = appState.tickers[appState.currentTicker];
   const tbody = document.getElementById('log-tbody');
   const alertBox = document.getElementById('active-sell-alert');

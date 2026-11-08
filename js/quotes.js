@@ -263,6 +263,7 @@ async function fetchMarketDataAndAnalyze(isAutoRefresh = false) {
 
     t.lastQuoteAt = Date.now();
     computeRealisticTargets(t, !isAutoRefresh);
+    checkPriceAlerts(ticker, livePrice);
 
     document.getElementById('current-price').value = t.currentPrice;
 

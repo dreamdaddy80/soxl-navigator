@@ -177,6 +177,7 @@ function recalcGrowthMode(syncFromDOM = true) {
   // 과거 검증 · 연간 복리 시뮬레이터 & 명예의 전당 렌더링
   renderSplitBacktest();
   renderGrowthCompoundAndHistory();
+  renderJournalAnalytics();
 }
 
 function fillGrowthBuyFromToday() {

@@ -35,7 +35,7 @@ const SIMULATOR_DEFAULTS = {
 };
 
 // saved: localStorage에 들어 있던 앱 상태, store: 그 밖의 localStorage 항목, prompts: prompt() 응답 순서
-function boot({ saved = null, store: extraStore = {}, prompts = [] } = {}) {
+function boot({ saved = null, store: extraStore = {}, prompts = [], fetch = null } = {}) {
   const store = { ...extraStore };
   if (saved) store.soxl_rescue_nav_v3 = JSON.stringify(saved);
 
@@ -46,6 +46,9 @@ function boot({ saved = null, store: extraStore = {}, prompts = [] } = {}) {
   const promptQueue = [...prompts];
   const context = vm.createContext({
     console,
+    fetch,
+    AbortController,
+    URLSearchParams,
     setTimeout: () => 0,
     clearTimeout() {},
     localStorage: {

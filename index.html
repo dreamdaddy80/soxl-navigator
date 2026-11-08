@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SOXL · TQQQ 올인원 투자 네비게이터</title>
-  <link rel="stylesheet" href="styles.css?v=20261108-13" />
+  <link rel="stylesheet" href="styles.css?v=20261108-14" />
   <!-- TradingView Widget Script -->
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 </head>
@@ -401,6 +401,30 @@
             </div>
           </div>
         </div>
+        <div class="card">
+          <div class="card-header">
+            <h2>🔔 가격 알림</h2>
+            <div class="alert-channel-btns">
+              <button type="button" class="btn-secondary" onclick="enableBrowserAlerts()">🖥️ 브라우저 알림 켜기</button>
+              <button type="button" class="btn-secondary" onclick="setTelegramAlert()">✈️ 텔레그램 연결</button>
+            </div>
+          </div>
+          <p class="bt-intro">목표가에 닿으면 한 번 알려 줍니다. <strong>이 페이지가 열려 있는 동안에만 동작합니다.</strong> 다른 탭을 보고 있으면 5분마다 확인하고, 휴대폰에서 앱을 내리거나 PC를 끄면 멈춥니다. 잠자는 동안 체결이 필요하면 증권사 앱에 지정가 주문을 걸어 두세요.</p>
+          <p class="bt-rule" id="alert-channel-status"></p>
+          <div class="alert-presets" id="alert-presets"></div>
+          <div class="alert-form">
+            <div class="input-group">
+              <label for="alert-price">직접 입력 ($)</label>
+              <input type="number" id="alert-price" min="0.01" step="0.01" placeholder="예: 52.00" />
+            </div>
+            <div class="input-group">
+              <label for="alert-memo">메모 (선택)</label>
+              <input type="text" id="alert-memo" maxlength="40" placeholder="예: 2차 매도 타점" />
+            </div>
+            <button type="button" class="btn-primary" onclick="addCustomAlert()">알림 추가</button>
+          </div>
+          <div id="alert-list"></div>
+        </div>
       </section>
 
       <!-- ================================================================= -->
@@ -740,6 +764,13 @@
           </div>
         </div>
 
+        <div class="card" style="margin-bottom:24px;">
+          <div class="card-header">
+            <h2 id="journal-analytics-title">📊 내 매매 성적표</h2>
+          </div>
+          <div id="journal-analytics" class="bt-result"></div>
+        </div>
+
         <!-- 1. 원금 탈출 구출 기록장 -->
         <div class="card" style="margin-bottom:24px;">
           <div class="card-header">
@@ -861,18 +892,22 @@
     </div>
   </div>
 
-  <script src="js/format.js?v=20261108-13"></script>
-  <script src="js/ledger.js?v=20261108-13"></script>
-  <script src="js/state.js?v=20261108-13"></script>
-  <script src="js/indicators.js?v=20261108-13"></script>
-  <script src="js/quotes.js?v=20261108-13"></script>
-  <script src="js/backtest.js?v=20261108-13"></script>
-  <script src="js/ui-core.js?v=20261108-13"></script>
-  <script src="js/ui-backup.js?v=20261108-13"></script>
-  <script src="js/ui-growth.js?v=20261108-13"></script>
-  <script src="js/ui-backtest.js?v=20261108-13"></script>
-  <script src="js/ui-rescue.js?v=20261108-13"></script>
-  <script src="js/ui-journal.js?v=20261108-13"></script>
-  <script src="js/main.js?v=20261108-13"></script>
+  <script src="js/format.js?v=20261108-14"></script>
+  <script src="js/ledger.js?v=20261108-14"></script>
+  <script src="js/state.js?v=20261108-14"></script>
+  <script src="js/indicators.js?v=20261108-14"></script>
+  <script src="js/quotes.js?v=20261108-14"></script>
+  <script src="js/backtest.js?v=20261108-14"></script>
+  <script src="js/alerts.js?v=20261108-14"></script>
+  <script src="js/analytics.js?v=20261108-14"></script>
+  <script src="js/ui-core.js?v=20261108-14"></script>
+  <script src="js/ui-backup.js?v=20261108-14"></script>
+  <script src="js/ui-growth.js?v=20261108-14"></script>
+  <script src="js/ui-backtest.js?v=20261108-14"></script>
+  <script src="js/ui-rescue.js?v=20261108-14"></script>
+  <script src="js/ui-journal.js?v=20261108-14"></script>
+  <script src="js/ui-analytics.js?v=20261108-14"></script>
+  <script src="js/main.js?v=20261108-14"></script>
+  <div id="alert-toast-area" class="alert-toast-area" aria-live="polite"></div>
 </body>
 </html>

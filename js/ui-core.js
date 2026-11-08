@@ -365,6 +365,7 @@ function recalcAll(syncFromDOM = true) {
   updateAutoSignalDashboard(breakevenPrice);
   runSimulator(false, false);
   renderLogs();
+  renderPriceAlerts();
 }
 
 function updateAutoSignalDashboard(breakevenPrice) {
