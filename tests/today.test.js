@@ -20,13 +20,23 @@ function setQuote(app, price, ms = WINTER_REGULAR, prevClose = 44) {
 
 function appReady(options) {
   const app = boot(options);
+  app.run('appState.tickers.SOXL.planRule = "ROTATION"');
   setClock(app, WINTER_REGULAR);
   setQuote(app, 45);
   return app;
 }
 
-function fill(app, price, shares) {
-  app.run('openTodayPanel("fill")');
+function vrReady(options) {
+  const app = boot(options);
+  setClock(app, WINTER_REGULAR);
+  setQuote(app, 45);
+  app.run('renderToday()');
+  return app;
+}
+
+function fill(app, price, shares, kind) {
+  const orderKind = kind || planOf(app).stage;
+  app.run(`openTodayPanel("fill", "${orderKind}")`);
   app.els['today-fill-price'] = { value: String(price) };
   app.els['today-fill-shares'] = { value: String(shares) };
   app.els['today-fill-date'] = { value: '2026-12-15' };
@@ -139,7 +149,7 @@ test('보유보다 많이 매도 체결로 기록할 수 없다', () => {
 });
 
 test('재매수에 못 쓰는 잔돈만 있으면 매도 단계로 간다', () => {
-  const app = boot({ saved: { tickers: { SOXL: { baseShares: 100, baseAvgPrice: 80, originalPrincipal: 8000, baseCash: 30, shares: 100, avgPrice: 80, logs: [] } } } });
+  const app = boot({ saved: { tickers: { SOXL: { planRule: 'ROTATION', baseShares: 100, baseAvgPrice: 80, originalPrincipal: 8000, baseCash: 30, shares: 100, avgPrice: 80, logs: [] } } } });
   setClock(app, WINTER_REGULAR);
   setQuote(app, 45);
   app.run('renderToday()');
@@ -147,7 +157,7 @@ test('재매수에 못 쓰는 잔돈만 있으면 매도 단계로 간다', () =
 });
 
 test('입금으로 생긴 현금은 재매수 단계로 제안한다', () => {
-  const app = boot({ saved: { tickers: { SOXL: { baseShares: 100, baseAvgPrice: 80, originalPrincipal: 8000, baseCash: 0, shares: 100, avgPrice: 80, logs: [{ id: 1, tradeDate: '2026-12-01', type: 'DEPOSIT', price: 1000, shares: 1, amount: 1000, memo: '' }] } } } });
+  const app = boot({ saved: { tickers: { SOXL: { planRule: 'ROTATION', baseShares: 100, baseAvgPrice: 80, originalPrincipal: 8000, baseCash: 0, shares: 100, avgPrice: 80, logs: [{ id: 1, tradeDate: '2026-12-01', type: 'DEPOSIT', price: 1000, shares: 1, amount: 1000, memo: '' }] } } } });
   setClock(app, WINTER_REGULAR);
   setQuote(app, 45);
   app.run('renderToday()');
@@ -157,7 +167,7 @@ test('입금으로 생긴 현금은 재매수 단계로 제안한다', () => {
 
 test('직접 조정한 주문은 그날 유지되고 다음 거래일에 풀린다', () => {
   const app = appReady();
-  app.run('renderToday(); openTodayPanel("adjust")');
+  app.run('renderToday(); openTodayPanel("adjust", "SELL")');
   app.els['today-adjust-price'] = { value: '50' };
   app.els['today-adjust-shares'] = { value: '10' };
   app.run('applyTodayAdjust()');
@@ -174,7 +184,7 @@ test('직접 조정한 주문은 그날 유지되고 다음 거래일에 풀린�
 
 test('입력 중에는 시세 갱신이 주문 카드를 다시 그리지 않는다', () => {
   const app = appReady();
-  app.run('renderToday(); openTodayPanel("fill")');
+  app.run('renderToday(); openTodayPanel("fill", "SELL")');
   app.els['today-order'].innerHTML = 'typing';
   app.run('renderToday()');
   assert.strictEqual(app.els['today-order'].innerHTML, 'typing');
@@ -221,12 +231,114 @@ test('주문을 정하기 전의 고가는 닿은 것으로 치지 않고, 그 �
 test('장 마감 뒤에는 지난 일봉의 고가로 체결을 안내하지 않는다', () => {
   const closed = Date.UTC(2026, 11, 16, 3, 0); // 뉴욕 22:00
   const app = boot();
+  app.run('appState.tickers.SOXL.planRule = "ROTATION"');
   setClock(app, closed);
   setQuote(app, 45, closed);
   app.run('renderToday()');
   app.run('appState.tickers.SOXL.dayHigh = 60');
   app.run('renderToday()');
   assert.ok(!app.els['today-order'].innerHTML.includes('오늘 고가'));
+});
+
+test('VR: 처음에는 평가금을 V로 잡고 현금이 없으면 매도 주문만 낸다', () => {
+  const app = vrReady();
+  const plan = planOf(app);
+  assert.strictEqual(plan.stage, 'VR');
+  assert.strictEqual(soxl(app).vrValue, 4500);
+  assert.strictEqual(plan.price, 51.75);
+  assert.strictEqual(plan.shares, 13);
+  assert.strictEqual(plan.buyShares, 0);
+  assert.strictEqual(soxl(app).vrNextUpdate, '2026-12-29');
+});
+
+test('VR: 매도 체결 뒤 같은 V로 매도·매수 주문이 함께 나온다', () => {
+  const app = vrReady();
+  fill(app, 51.75, 13, 'SELL');
+  const plan = planOf(app);
+  const cash = soxl(app).reservedCash;
+  assert.strictEqual(soxl(app).shares, 87);
+  assert.strictEqual(soxl(app).vrValue, 4500);
+  assert.strictEqual(plan.price, Number((4500 * 1.15 / 87).toFixed(2)));
+  assert.strictEqual(plan.buyPrice, Number((4500 * 0.85 / 87).toFixed(2)));
+  const budget = Math.min(4500 - 87 * plan.buyPrice, cash * 0.5);
+  assert.strictEqual(plan.buyShares, Math.floor(budget / (plan.buyPrice * 1.001)));
+  assert.ok(app.els['today-order'].innerHTML.includes('매수'));
+});
+
+test('VR: 매수 쪽을 체결로 기록할 수 있다', () => {
+  const app = vrReady();
+  fill(app, 51.75, 13, 'SELL');
+  const { buyPrice, buyShares } = planOf(app);
+  fill(app, buyPrice, buyShares, 'REBUY');
+  assert.strictEqual(soxl(app).shares, 87 + buyShares);
+  assert.strictEqual(soxl(app).logs[0].type, 'BUY');
+});
+
+test('VR: 2주가 지나면 V가 현금의 1/10만큼 오르고 그 전에는 그대로다', () => {
+  const app = vrReady();
+  fill(app, 51.75, 13, 'SELL');
+  const cash = soxl(app).reservedCash;
+  const in13 = Date.UTC(2026, 11, 28, 15, 0);
+  setClock(app, in13);
+  setQuote(app, 45, in13);
+  app.run('renderToday()');
+  assert.strictEqual(soxl(app).vrValue, 4500);
+  const in14 = Date.UTC(2026, 11, 29, 15, 0);
+  setClock(app, in14);
+  setQuote(app, 45, in14);
+  app.run('renderToday()');
+  assert.strictEqual(soxl(app).vrValue, Number((4500 + cash / 10).toFixed(2)));
+  assert.strictEqual(soxl(app).vrNextUpdate, '2027-01-12');
+});
+
+test('VR: 시세가 움직여도 주문가는 그대로고, 저장했다 불러와도 V가 유지된다', () => {
+  const app = vrReady();
+  setQuote(app, 50);
+  app.run('renderToday()');
+  assert.strictEqual(planOf(app).price, 51.75);
+  const reloaded = boot({ saved: JSON.parse(app.run('JSON.stringify(appState)')) });
+  assert.strictEqual(soxl(reloaded).vrValue, 4500);
+  assert.strictEqual(planOf(reloaded).price, 51.75);
+});
+
+test('VR: 시세가 없으면 V를 정하지 않는다', () => {
+  const app = boot();
+  setClock(app, WINTER_REGULAR);
+  app.run('renderToday()');
+  assert.strictEqual(soxl(app).vrValue, 0);
+  assert.strictEqual(planOf(app), null);
+});
+
+test('규칙을 바꿀 수 있고 VR로 돌아오면 V를 새로 잡는다', () => {
+  const app = vrReady();
+  app.run('setPlanRule("ROTATION")');
+  assert.strictEqual(planOf(app).stage, 'SELL');
+  setQuote(app, 40, WINTER_REGULAR, 40);
+  app.run('setPlanRule("VR")');
+  assert.strictEqual(planOf(app).stage, 'VR');
+  assert.strictEqual(soxl(app).vrValue, 4000);
+});
+
+test('VR 기준 다시 잡기는 지금 평가금으로 V를 맞춘다', () => {
+  const app = vrReady();
+  setQuote(app, 42);
+  app.run('resetVrBase()');
+  assert.strictEqual(soxl(app).vrValue, 4200);
+});
+
+test('진행 중이던 회전의 현금은 VR 현금으로 이어진다', () => {
+  const app = boot({ saved: { tickers: { SOXL: { baseShares: 100, baseAvgPrice: 80, originalPrincipal: 8000, baseCash: 0, shares: 100, avgPrice: 80, logs: [{ id: 1, tradeDate: '2026-12-01', type: 'SELL', price: 50, shares: 20, amount: 0, memo: '' }] } } } });
+  setClock(app, WINTER_REGULAR);
+  setQuote(app, 45);
+  app.run('renderToday()');
+  assert.strictEqual(planOf(app).stage, 'VR');
+  assert.strictEqual(soxl(app).vrValue, 3600);
+  assert.ok(planOf(app).buyShares > 0);
+});
+
+test('알림 버튼은 현재 규칙의 오늘 주문 가격을 쓴다', () => {
+  const app = vrReady();
+  assert.ok(app.els['alert-presets'].innerHTML.includes('오늘의 매도 $51.75'));
 });
 
 test('코드가 찾는 화면 요소는 모두 실제로 있다', () => {

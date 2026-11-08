@@ -3,9 +3,10 @@ const assert = require('node:assert');
 const { boot, syntheticBars } = require('./helpers/harness');
 
 const app = boot();
-const engine = app.run('({ btRotationRun, btRotationOdds, btAlternativesStudy, btSplitSim, btSplitStudy, btRsiSeries })');
+const engine = app.run('({ btVrPath, btRotationRun, btRotationOdds, btAlternativesStudy, btSplitSim, btSplitStudy, btRsiSeries })');
 const bar = (d, o, h, l, c) => ({ d, o, h, l, c });
 const RULE = { up: 0.09, drop: 0.1, ratio: 0.2 };
+const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} vs ${b}`);
 
 test('회전: 매도와 재매수가 지정가에 체결되고 수수료를 뺀다', () => {
   const bars = [bar('d0', 100, 100, 100, 100), bar('d1', 105, 110, 104, 108), bar('d2', 105, 106, 95, 100)];
@@ -30,6 +31,21 @@ test('회전: 대기 한도가 지나면 그날 종가에 재매수한다', () =
   assert.strictEqual(run.checkpoints[0].cashStuck, false);
 });
 
+test('VR: 상단 밴드 지정가에 V까지 팔고, 현금이 있으면 하단에서 절반 한도로 산다', () => {
+  const bars = [
+    bar('d0', 100, 100, 100, 100),
+    bar('d1', 110, 116, 109, 112),
+    bar('d2', 112, 113, 80, 90)
+  ];
+  const path = engine.btVrPath(bars, 0, 2);
+  const sold = Math.round(1000 - 100000 / 115);
+  const pool = sold * 115 * 0.999;
+  close(path[1], ((1000 - sold) * 112 + pool) / 100000);
+  const lower = (100000 * 0.85) / (1000 - sold);
+  const buy = Math.floor(Math.min(100000 - (1000 - sold) * lower, pool * 0.5) / (lower * 1.001));
+  close(path[2], ((1000 - sold + buy) * 90 + pool - buy * lower * 1.001) / 100000);
+});
+
 test('40분할: 첫날 1회분을 사고 평단 +목표%에서 졸업한다', () => {
   const bars = [bar('d0', 100, 100, 100, 100), bar('d1', 100, 100, 100, 100), bar('d2', 100, 115, 100, 112)];
   const indicators = { closes: bars.map(b => b.c), rsi: [50, 50, 50], bbLower: [0, 0, 0] };
@@ -45,11 +61,11 @@ test('백테스트 RSI는 화면 표시용 RSI와 같은 값을 낸다', () => {
   assert.ok(Math.abs(series[series.length - 1] - appRsi) < 1e-9);
 });
 
-test('대안 비교: 보유는 자기 자신과 같고 규칙 7개를 낸다', () => {
+test('대안 비교: 보유는 자기 자신과 같고 규칙 8개를 낸다', () => {
   const { bars, baseBars } = syntheticBars();
   const study = engine.btAlternativesStudy(bars, baseBars, { ...RULE, crashDrawdown: 0.45, breakevenMultiple: 2 });
   assert.ok(study.n > 0, '폭락 시작점이 있어야 한다');
-  assert.strictEqual(study.rules.length, 7);
+  assert.strictEqual(study.rules.length, 8);
   assert.strictEqual(study.rules[0].ratio2y, 1);
   assert.strictEqual(study.rules[0].beat2yPct, 0);
 });

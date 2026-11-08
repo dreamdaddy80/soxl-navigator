@@ -3217,3 +3217,40 @@ tbody tr:hover td {
     order: -1;
   }
 }
+
+/* VR 주문 */
+.today-order-vr { border-top-color: #121316; }
+
+.today-order-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.today-order-row:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+
+.today-order .today-order-row .today-order-main {
+  font-size: 1.5rem;
+}
+
+.today-vr-status {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.today-rule-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}

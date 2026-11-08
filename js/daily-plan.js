@@ -5,6 +5,11 @@ const NY_REGULAR_OPEN = 570; // 09:30
 const NY_REGULAR_CLOSE = 960; // 16:00
 const NY_AFTER_CLOSE = 1200; // 20:00
 const PLAN_MIN_CASH_RATIO = 0.02; // 자산의 2% 미만 잔돈은 재매수 대상으로 보지 않는다
+// 라오어 VR 기본 공식: 다음 V = V + 현금/G, 밴드 ±15%, 매수는 현금의 50%까지, 2주마다 갱신
+const VR_G = 10;
+const VR_BAND = 0.15;
+const VR_POOL_LIMIT = 0.5;
+const VR_CYCLE_DAYS = 14;
 
 let marketOpenHint = null; // Twelve Data가 알려 주는 정규장 개장 여부 (휴장일 판별용)
 
@@ -91,8 +96,54 @@ function rescueBreakeven(t) {
   return t.shares > 0 ? Math.max(0, principal - (t.reservedCash || 0)) / t.shares : 0;
 }
 
+function isVrRule(t) {
+  return t.planRule !== 'ROTATION';
+}
+
+// 밴드 경계의 지정가. 상단에서는 V까지 팔고, 하단에서는 V까지 사되 현금의 50%를 넘지 않는다
+function computeVrOrders(value, shares, cash) {
+  const price = Number(((value * (1 + VR_BAND)) / shares).toFixed(2));
+  const buyPrice = Number(((value * (1 - VR_BAND)) / shares).toFixed(2));
+  const budget = Math.min(value - shares * buyPrice, cash * VR_POOL_LIMIT);
+  return {
+    price,
+    shares: Math.max(0, Math.round(shares - value / price)),
+    buyPrice,
+    buyShares: Math.max(0, Math.floor(budget / (buyPrice * (1 + TRADING_FEE_RATE))))
+  };
+}
+
+// V를 처음 정하거나 2주가 지났으면 올린다. V를 아직 정할 수 없으면 false
+function ensureVrValue(t, session) {
+  if (!isVrRule(t) || t.shares <= 0) return true;
+  if (!(t.vrValue > 0)) {
+    if (!isQuoteFresh(t)) return false;
+    t.vrValue = Number((t.shares * t.currentPrice).toFixed(2));
+    t.vrNextUpdate = addDaysISO(session.tradeDay, VR_CYCLE_DAYS);
+    return true;
+  }
+  while (t.vrNextUpdate && session.tradeDay >= t.vrNextUpdate) {
+    t.vrValue = Number((t.vrValue + (t.reservedCash || 0) / VR_G).toFixed(2));
+    t.vrNextUpdate = addDaysISO(t.vrNextUpdate, VR_CYCLE_DAYS);
+  }
+  return true;
+}
+
+// 이 계획에서 지금 걸 수 있는 지정가 주문들
+function planOrders(plan) {
+  if (!plan) return [];
+  if (plan.stage === 'VR') {
+    const orders = [{ kind: 'SELL', price: plan.price, shares: plan.shares }];
+    if (plan.buyShares > 0) orders.push({ kind: 'REBUY', price: plan.buyPrice, shares: plan.buyShares });
+    return orders.filter(o => o.shares > 0);
+  }
+  return plan.stage === 'SELL' || plan.stage === 'REBUY'
+    ? [{ kind: plan.stage, price: plan.price, shares: plan.shares }]
+    : [];
+}
+
 function planLedgerKey(t) {
-  return `${t.shares}|${t.reservedCash || 0}|${appState.targetMode || 'MID'}`;
+  return `${t.shares}|${t.reservedCash || 0}|${isVrRule(t) ? `VR|${t.vrValue}` : appState.targetMode || 'MID'}`;
 }
 
 function openRotation(t) {
@@ -127,6 +178,11 @@ function buildDailyPlan(t, session) {
     return { ...common, stage: 'DONE', price: Number(breakeven.toFixed(2)), shares: 0, reason: '' };
   }
 
+  if (t.shares <= 0) return { ...common, stage: 'EMPTY', price: 0, shares: 0, reason: '' };
+  if (isVrRule(t)) {
+    return { ...common, stage: 'VR', reason: '', ...computeVrOrders(t.vrValue, t.shares, t.reservedCash || 0) };
+  }
+
   if (hasRebuyCash(t)) {
     const drop = (t.dropRatio || 10) / 100;
     const open = openRotation(t);
@@ -141,8 +197,6 @@ function buildDailyPlan(t, session) {
     }
   }
 
-  if (t.shares <= 0) return { ...common, stage: 'EMPTY', price: 0, shares: 0, reason: '' };
-
   const target = computeSellTargets(t, basis);
   return {
     ...common,
@@ -156,6 +210,7 @@ function buildDailyPlan(t, session) {
 // 거래일과 잔고가 그대로면 같은 주문을 유지한다. 새 주문은 최신 시세가 있을 때만 만든다
 function ensureDailyPlan(t) {
   const session = currentMarketSession();
+  if (!ensureVrValue(t, session)) return null;
   const plan = t.dailyPlan;
   const reachedBreakeven = t.shares > 0 && rescueBreakeven(t) > 0 && t.currentPrice >= rescueBreakeven(t);
   const planIsCurrent = plan && plan.tradeDay === session.tradeDay && plan.ledgerKey === planLedgerKey(t);
@@ -168,35 +223,25 @@ function ensureDailyPlan(t) {
 }
 
 // 이 주문이 체결되면 잔고가 어떻게 되고 다음 제안이 무엇인지
-function previewPlanFill(t, plan) {
+function previewPlanFill(t, plan, order) {
   const cash = t.reservedCash || 0;
   const principal = getTotalPrincipal(t) || (t.shares * t.avgPrice);
-  const breakevenOf = (shares, money) => (shares > 0 ? Math.max(0, principal - money) / shares : 0);
+  const isSell = order.kind === 'SELL';
+  const shares = isSell ? t.shares - order.shares : t.shares + order.shares;
+  const money = isSell
+    ? cash + order.shares * order.price * (1 - TRADING_FEE_RATE)
+    : Math.max(0, cash - order.shares * order.price * (1 + TRADING_FEE_RATE));
+  const result = { shares, cash: money, breakeven: shares > 0 ? Math.max(0, principal - money) / shares : 0 };
 
-  if (plan.stage === 'SELL') {
-    const proceeds = plan.shares * plan.price * (1 - TRADING_FEE_RATE);
-    const shares = t.shares - plan.shares;
-    const money = cash + proceeds;
-    const nextPrice = Number((plan.price * (1 - (t.dropRatio || 10) / 100)).toFixed(2));
-    return {
-      shares,
-      cash: money,
-      breakeven: breakevenOf(shares, money),
-      nextStage: 'REBUY',
-      nextPrice,
-      nextShares: Math.floor(money / (nextPrice * (1 + TRADING_FEE_RATE)))
-    };
+  if (plan.stage === 'VR') {
+    const next = computeVrOrders(t.vrValue, shares, money);
+    result.nextText = `매도 ${formatUSD(next.price)}${next.buyShares > 0 ? ` · 매수 ${formatUSD(next.buyPrice)}` : ''}`;
+  } else if (isSell) {
+    const nextPrice = order.price * (1 - (t.dropRatio || 10) / 100);
+    result.nextText = `${Math.floor(money / (nextPrice * (1 + TRADING_FEE_RATE))).toLocaleString()}주 재매수 ${formatUSD(nextPrice)}`;
+  } else {
+    const nextShares = Math.max(1, Math.round(shares * ((t.sellRatio || 20) / 100)));
+    result.nextText = `${nextShares.toLocaleString()}주 매도 약 ${formatUSD(computeSellTargets(t, order.price).sell1)}`;
   }
-
-  const cost = plan.shares * plan.price * (1 + TRADING_FEE_RATE);
-  const shares = t.shares + plan.shares;
-  const money = Math.max(0, cash - cost);
-  return {
-    shares,
-    cash: money,
-    breakeven: breakevenOf(shares, money),
-    nextStage: 'SELL',
-    nextPrice: Number(computeSellTargets(t, plan.price).sell1.toFixed(2)),
-    nextShares: Math.max(1, Math.round(shares * ((t.sellRatio || 20) / 100)))
-  };
+  return result;
 }

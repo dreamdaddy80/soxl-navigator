@@ -53,6 +53,9 @@ const DEFAULT_STATE = {
       logs: [],
       alerts: [],
       dailyPlan: null,
+      planRule: 'VR', // 'VR' | 'ROTATION'
+      vrValue: 0, // VR 기준 평가금 V (0이면 아직 시작 전)
+      vrNextUpdate: '',
       // 본전 탈출 이후 꾸준한 수익 창출 모드(GROWTH) 데이터
       growth: {
         totalBudget: 10000,
@@ -97,6 +100,9 @@ const DEFAULT_STATE = {
       logs: [],
       alerts: [],
       dailyPlan: null,
+      planRule: 'VR', // 'VR' | 'ROTATION'
+      vrValue: 0, // VR 기준 평가금 V (0이면 아직 시작 전)
+      vrNextUpdate: '',
       growth: {
         totalBudget: 30000,
         splits: 40,
@@ -166,7 +172,7 @@ function sanitizeAlerts(list) {
 
 function sanitizeDailyPlan(plan) {
   if (!plan || typeof plan !== 'object') return null;
-  if (!['SELL', 'REBUY', 'DONE', 'EMPTY'].includes(plan.stage)) return null;
+  if (!['SELL', 'REBUY', 'VR', 'DONE', 'EMPTY'].includes(plan.stage)) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(plan.tradeDay || '') || typeof plan.ledgerKey !== 'string') return null;
   return {
     stage: plan.stage,
@@ -174,6 +180,8 @@ function sanitizeDailyPlan(plan) {
     ledgerKey: plan.ledgerKey,
     price: Number(plan.price) || 0,
     shares: Number(plan.shares) || 0,
+    buyPrice: Number(plan.buyPrice) || 0,
+    buyShares: Number(plan.buyShares) || 0,
     basis: Number(plan.basis) || 0,
     highAtCreate: Number(plan.highAtCreate) || 0,
     lowAtCreate: Number(plan.lowAtCreate) || 0,

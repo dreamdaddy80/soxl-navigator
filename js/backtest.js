@@ -278,6 +278,7 @@ const BT_ALT_RULES = [
   { id: 'hold', label: '그냥 보유', desc: '아무것도 하지 않음' },
   { id: 'rotation', label: '앱 회전 규칙', desc: '시뮬레이터 설정 그대로, 재매수가 올 때까지 대기' },
   { id: 'rotation20', label: '회전 + 20일 대기 한도', desc: '20거래일 안에 재매수가 안 오면 그날 종가에 재매수' },
+  { id: 'vr', label: 'VR 규칙 (오늘의 주문 기본)', desc: '기준 평가금 V의 ±15% 밴드에 지정가, 2주마다 V를 현금/10만큼 올림' },
   { id: 'trendCash', label: '200일선 아래면 현금', desc: '전일 종가가 200일 평균 아래면 전량 팔고, 위로 올라오면 다시 매수' },
   { id: 'trendBase', label: '200일선 아래면 1배 ETF', desc: '200일 평균 아래 구간에는 1배 ETF로 갈아탔다가 위로 올라오면 복귀' },
   { id: 'halfBase', label: '절반을 1배 ETF로', desc: '시작일에 절반을 1배 ETF로 바꾸고 그대로 보유' },
@@ -332,6 +333,40 @@ function btRotationPath(bars, s, end, opts, timeout) {
   return path;
 }
 
+// VR: 전량 주식으로 시작해 매일 밴드 경계에 지정가를 건다 (앱이 안내하는 주문과 같은 방식, 하루 한 건)
+function btVrPath(bars, s, end) {
+  const startValue = 1000 * bars[s].c;
+  let shares = 1000;
+  let pool = 0;
+  let value = startValue;
+  const path = [1];
+  for (let i = s + 1; i <= end; i++) {
+    const b = bars[i];
+    if ((i - s) % 10 === 0) value += pool / 10;
+    if (shares > 0) {
+      const upper = (value * 1.15) / shares;
+      const lower = (value * 0.85) / shares;
+      if (b.l <= lower && pool > 0) {
+        const px = Math.min(b.o, lower);
+        const qty = Math.floor(Math.min(value - shares * px, pool * 0.5) / (px * (1 + BT_FEE_RATE)));
+        if (qty > 0) {
+          shares += qty;
+          pool -= qty * px * (1 + BT_FEE_RATE);
+        }
+      } else if (b.h >= upper) {
+        const px = Math.max(b.o, upper);
+        const qty = Math.round(shares - value / px);
+        if (qty > 0) {
+          shares -= qty;
+          pool += qty * px * (1 - BT_FEE_RATE);
+        }
+      }
+    }
+    path.push((shares * b.c + pool) / startValue);
+  }
+  return path;
+}
+
 // 레버리지·1배 ETF·현금 사이를 종가에 옮기는 규칙들 (옮길 때마다 매도·매수 수수료)
 function btSwitchPath(bars, sma200, s, end, ruleId) {
   let lev = 1 / bars[s].c; // 시작 가치 1
@@ -381,6 +416,7 @@ function btAlternativesStudy(bars, baseBars, opts) {
       const id = st.rule.id;
       const path = id === 'rotation' ? btRotationPath(aligned, s, end, opts, 0)
         : id === 'rotation20' ? btRotationPath(aligned, s, end, opts, 20)
+          : id === 'vr' ? btVrPath(aligned, s, end)
           : id === 'hold' ? aligned.slice(s, end + 1).map(b => b.c / aligned[s].c)
             : btSwitchPath(aligned, sma200, s, end, id);
       if (id === 'hold') holdPath = path;

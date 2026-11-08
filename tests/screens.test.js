@@ -57,14 +57,14 @@ test('40분할 검증을 하면 복리 시뮬레이터가 과거 평균으로 �
   assert.ok(app.els['g-compound-period-th'].textContent.includes('과거 평균'));
 });
 
-test('대안 비교: 1배 ETF 일봉이 없으면 안내, 있으면 규칙 7개 표', () => {
+test('대안 비교: 1배 ETF 일봉이 없으면 안내, 있으면 규칙 8개 표', () => {
   const without = bootWithHistory();
   without.run('renderRotationBacktest()');
   assert.ok(without.els['bt-alt-result'].innerHTML.includes('SOXX 일봉을 받아'));
 
   const withBase = bootWithHistory({ withBase: true });
   withBase.run('renderRotationBacktest()');
-  assert.strictEqual((withBase.els['bt-alt-result'].innerHTML.match(/<tr>/g) || []).length, 8);
+  assert.strictEqual((withBase.els['bt-alt-result'].innerHTML.match(/<tr>/g) || []).length, 9);
 });
 
 test('시나리오: 재매수를 못 하면 본전 주가가 올라간다', () => {
