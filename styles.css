@@ -2813,20 +2813,6 @@ tbody tr:hover td {
   font-size: 1.5rem;
 }
 
-/* 화면별 적용 규칙 안내 */
-.rule-notice {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  padding: 12px 16px;
-  border-radius: 14px;
-  background: var(--warn-soft);
-  color: var(--warn);
-  font-size: 0.86rem;
-  line-height: 1.55;
-}
 
 /* ========================================================================= */
 /* 화면 틀: 공통 유틸, 헤더, 오늘 탭, 설정 시트, 하위 탭, 표, 모바일 */
@@ -3174,7 +3160,6 @@ body {
   color: var(--text-muted);
 }
 
-.chart-side .rule-notice,
 .chart-side .live-quote-bar,
 .chart-side .strategy-mode-bar {
   margin-bottom: 12px !important;

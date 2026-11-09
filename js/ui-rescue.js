@@ -80,7 +80,7 @@ function runSimulator(recalcBuyPriceFromDrop = true, sync = true) {
   document.getElementById('res-after-target').textContent = formatUSD(newBreakevenPrice);
   const priceDropDiff = oldBreakevenPrice - newBreakevenPrice;
   document.getElementById('res-target-diff').innerHTML = `본전 기준선 <strong>${formatSignedUSD(-priceDropDiff)}</strong>`;
-  document.getElementById('concl-rescue-sim').innerHTML =
+  if (!isVrRule(t)) document.getElementById('concl-rescue-sim').innerHTML =
     `두 주문이 모두 체결되면 본전 <strong>${formatUSD(oldBreakevenPrice)} → ${formatUSD(newBreakevenPrice)}</strong>, 주식 ${totalShares.toLocaleString()}주 → ${newTotalShares.toLocaleString()}주`;
   syncPresetButtons('sell-ratio-presets', sellRatio);
   syncPresetButtons('drop-ratio-presets', effectiveDropPct);

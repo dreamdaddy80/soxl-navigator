@@ -388,6 +388,30 @@ function bollingerPositionText(percentB) {
   return '볼린저 밴드 중간';
 }
 
+// 회전 규칙 기준 목표가와 산출 근거 (VR 규칙이면 ui-vr.js가 대신 그린다)
+function renderRotationChartTargets(t) {
+  const cur = t.currentPrice;
+  setText('ind-sell-name', '회전 규칙 매도가 (1차 / 2차)');
+  setText('ind-buy-name', '회전 규칙 재매수가 (1차 / 2차)');
+  const sell1Pct = (((t.autoSellTarget1 - cur) / cur) * 100).toFixed(1);
+  const sell2Pct = (((t.autoSellTarget2 - cur) / cur) * 100).toFixed(1);
+  document.getElementById('ind-sell-target').textContent = `${formatUSD(t.autoSellTarget1)} (+${sell1Pct}%) / ${formatUSD(t.autoSellTarget2)} (+${sell2Pct}%)`;
+  document.getElementById('ind-sell-basis').textContent = t.sellReasonText || '선택한 반등 기준 적용';
+
+  const buy1Pct = (((t.autoSellTarget1 - t.autoBuyTarget1) / t.autoSellTarget1) * 100).toFixed(0);
+  document.getElementById('ind-buy-target').textContent = `${formatUSD(t.autoBuyTarget1)} (매도가 -${buy1Pct}%) / ${formatUSD(t.autoBuyTarget2)}`;
+  document.getElementById('ind-buy-basis').textContent = `1차 매도 체결 후 -10% 눌림목 & 볼린저 하단`;
+
+  const rationaleBox = document.getElementById('target-rationale-box');
+  if (rationaleBox) {
+    rationaleBox.innerHTML = `
+      <strong>회전 규칙 목표 매도가 ${formatUSD(t.autoSellTarget1)}의 산출 근거</strong><br/>
+      • 현재 주가 ${formatUSD(cur)} 기준 <strong>${t.sellReasonText}</strong><br/>
+      • 기준별 비교: 짧은 회전(5일선·+4.5%) <strong>${formatUSD(t.sma5 && t.sma5 > cur * 1.02 ? t.sma5 : cur * 1.045)}</strong> · 표준 반등(20일선·+9%) <strong>${formatUSD(t.sma20 && t.sma20 > cur * 1.05 ? t.sma20 : cur * 1.09)}</strong> · 강한 반등(2주고점·+15%) <strong>${formatUSD(t.recentHigh && t.recentHigh > cur * 1.1 ? t.recentHigh : cur * 1.15)}</strong>
+    `;
+  }
+}
+
 function updateAutoSignalDashboard(breakevenPrice) {
   const ticker = appState.currentTicker;
   const t = appState.tickers[ticker];
@@ -424,24 +448,6 @@ function updateAutoSignalDashboard(breakevenPrice) {
   document.getElementById('ind-sma20-val').textContent = `5일 ${formatUSD(sma5)} / 20일 ${formatUSD(sma20)}`;
   document.getElementById('ind-sma20-status').textContent =
     cur < sma5 ? '1차 저항: 5일선 / 2차 저항: 20일선' : '5일선 위 · 다음 저항: 20일선';
-
-  const sell1Pct = (((t.autoSellTarget1 - cur) / cur) * 100).toFixed(1);
-  const sell2Pct = (((t.autoSellTarget2 - cur) / cur) * 100).toFixed(1);
-  document.getElementById('ind-sell-target').textContent = `${formatUSD(t.autoSellTarget1)} (+${sell1Pct}%) / ${formatUSD(t.autoSellTarget2)} (+${sell2Pct}%)`;
-  document.getElementById('ind-sell-basis').textContent = t.sellReasonText || '선택한 반등 기준 적용';
-
-  const buy1Pct = (((t.autoSellTarget1 - t.autoBuyTarget1) / t.autoSellTarget1) * 100).toFixed(0);
-  document.getElementById('ind-buy-target').textContent = `${formatUSD(t.autoBuyTarget1)} (매도가 -${buy1Pct}%) / ${formatUSD(t.autoBuyTarget2)}`;
-  document.getElementById('ind-buy-basis').textContent = `1차 매도 체결 후 -10% 눌림목 & 볼린저 하단`;
-
-  const rationaleBox = document.getElementById('target-rationale-box');
-  if (rationaleBox) {
-    rationaleBox.innerHTML = `
-      <strong>회전 규칙 목표 매도가 ${formatUSD(t.autoSellTarget1)}의 산출 근거</strong><br/>
-      • 현재 주가 ${formatUSD(cur)} 기준 <strong>${t.sellReasonText}</strong><br/>
-      • 기준별 비교: 짧은 회전(5일선·+4.5%) <strong>${formatUSD(t.sma5 && t.sma5 > cur * 1.02 ? t.sma5 : cur * 1.045)}</strong> · 표준 반등(20일선·+9%) <strong>${formatUSD(t.sma20 && t.sma20 > cur * 1.05 ? t.sma20 : cur * 1.09)}</strong> · 강한 반등(2주고점·+15%) <strong>${formatUSD(t.recentHigh && t.recentHigh > cur * 1.1 ? t.recentHigh : cur * 1.15)}</strong>
-    `;
-  }
 
   const bbWidth = Math.max(0.01, bbUpper - bbLower);
   const percentB = Math.min(100, Math.max(0, ((cur - bbLower) / bbWidth) * 100));

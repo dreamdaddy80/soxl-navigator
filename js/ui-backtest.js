@@ -11,7 +11,7 @@ const BT_HISTORY_TIMEOUT_MS = 30000;
 
 const btHistory = {}; // ticker → { at, source, bars }
 
-const btResults = { rotation: {}, odds: {}, alternatives: {}, split: {} }; // ticker → { key, result }
+const btResults = { rotation: {}, vr: {}, vrOdds: {}, odds: {}, alternatives: {}, split: {} }; // ticker → { key, result }
 
 const BT_BASE_TICKER = { SOXL: 'SOXX', TQQQ: 'QQQ' }; // 대안 비교용 같은 지수의 1배 ETF
 
@@ -423,6 +423,12 @@ function renderRotationBacktest() {
   const p = getRotationBacktestParams(t);
   const ruleText = `규칙: 현재가 대비 <strong>+${(p.up * 100).toFixed(1)}%</strong> 반등에 보유의 <strong>${Math.round(p.ratio * 100)}%</strong> 매도 → 매도가 대비 <strong>-${(p.drop * 100).toFixed(1)}%</strong>에 재매수` +
     (p.timeout ? ` (재매수가 ${p.timeout}거래일 안 오면 그날 종가에 재매수)` : ' (재매수가 올 때까지 대기 · 앱 기본 규칙)');
+  if (isVrRule(t)) {
+    renderVrScenarios(t);
+    renderAlternativesBacktest(p);
+    renderVrBacktest(p);
+    return;
+  }
   document.getElementById('bt-rot-rule').innerHTML = ruleText;
   renderRotationScenarios(p);
   renderAlternativesBacktest(p);

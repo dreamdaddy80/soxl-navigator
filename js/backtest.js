@@ -54,6 +54,17 @@ function btBollingerLowerSeries(closes, period = 20, mult = 2) {
   return out;
 }
 
+// 겹치는 시작일이 많으므로 60거래일 넘게 끊긴 구간을 독립 에피소드로 센다
+function btEpisodes(bars, starts) {
+  const episodes = [];
+  starts.forEach(s => {
+    const last = episodes[episodes.length - 1];
+    if (!last || s - last.end > 60) episodes.push({ from: bars[s].d, to: bars[s].d, end: s });
+    else { last.end = s; last.to = bars[s].d; }
+  });
+  return episodes.map(e => ({ from: e.from, to: e.to }));
+}
+
 // 시작점 후보: 상장 1년 뒤부터, 끝까지 minRemaining거래일 이상 남은 날
 // crashDrawdown > 0이면 직전 1년 최고 종가 대비 그만큼 이상 떨어진 날만
 function btStartIndices(bars, crashDrawdown, minRemaining) {
@@ -136,13 +147,7 @@ function btRotationStudy(bars, opts) {
 
   const starts = btStartIndices(bars, crashDrawdown, 1);
 
-  // 겹치는 시작일이 많으므로 60거래일 넘게 끊긴 구간을 독립 에피소드로 센다
-  const episodes = [];
-  starts.forEach(s => {
-    const last = episodes[episodes.length - 1];
-    if (!last || s - last.end > 60) episodes.push({ from: bars[s].d, to: bars[s].d, end: s });
-    else { last.end = s; last.to = bars[s].d; }
-  });
+  const episodes = btEpisodes(bars, starts);
 
   const perHorizon = horizons.map(days => ({ days, ratios: [], stuck: 0 }));
   const be = { n: 0, holdReached: 0, rotReached: 0, bothReached: 0, rotFaster: 0, holdDays: [], rotDays: [] };
@@ -173,7 +178,7 @@ function btRotationStudy(bars, opts) {
     from: bars[0].d,
     to: bars[bars.length - 1].d,
     startCount: starts.length,
-    episodes: episodes.map(e => ({ from: e.from, to: e.to })),
+    episodes,
     horizons: perHorizon.map(h => ({
       days: h.days,
       n: h.ratios.length,
@@ -365,6 +370,95 @@ function btVrPath(bars, s, end) {
     path.push((shares * b.c + pool) / startValue);
   }
   return path;
+}
+
+// 시작일마다 VR과 보유를 비교한다 (화면 표시는 회전 검증과 같은 구성)
+function btVrStudy(bars, opts) {
+  const horizons = opts.horizons || [BT_YEAR_BARS, BT_YEAR_BARS * 2];
+  const beMult = opts.breakevenMultiple > 1 ? opts.breakevenMultiple : 0;
+  const starts = btStartIndices(bars, opts.crashDrawdown || 0, 1);
+  const perHorizon = horizons.map(days => ({ days, ratios: [] }));
+  const be = { n: 0, holdReached: 0, vrReached: 0, bothReached: 0, vrFaster: 0, holdDays: [], vrDays: [] };
+  const last = bars.length - 1;
+
+  starts.forEach(s => {
+    const remaining = last - s;
+    const withBreakeven = beMult > 0 && remaining >= BT_YEAR_BARS;
+    if (!withBreakeven && remaining < horizons[0]) return;
+    const end = withBreakeven ? last : Math.min(last, s + horizons[horizons.length - 1]);
+    const path = btVrPath(bars, s, end);
+    perHorizon.forEach(h => {
+      if (h.days <= remaining) h.ratios.push(path[h.days] / (bars[s + h.days].c / bars[s].c));
+    });
+    if (withBreakeven) {
+      const vrDay = path.findIndex(v => v >= beMult);
+      let holdDay = -1;
+      for (let i = s; i <= last; i++) {
+        if (bars[i].c / bars[s].c >= beMult) { holdDay = i - s; break; }
+      }
+      be.n++;
+      if (holdDay >= 0) { be.holdReached++; be.holdDays.push(holdDay); }
+      if (vrDay >= 0) { be.vrReached++; be.vrDays.push(vrDay); }
+      if (holdDay >= 0 && vrDay >= 0) {
+        be.bothReached++;
+        if (vrDay < holdDay) be.vrFaster++;
+      }
+    }
+  });
+
+  return {
+    startCount: starts.length,
+    episodes: btEpisodes(bars, starts),
+    horizons: perHorizon.map(h => ({
+      days: h.days,
+      n: h.ratios.length,
+      beatPct: btPct(h.ratios.filter(r => r > 1 + 1e-9).length, h.ratios.length),
+      losePct: btPct(h.ratios.filter(r => r < 1 - 1e-9).length, h.ratios.length), // 주문 없이 끝나 보유와 같은 경우는 어느 쪽에도 넣지 않는다
+      medianRatio: btMedian(h.ratios)
+    })),
+    breakeven: beMult > 0 ? {
+      multiple: beMult,
+      n: be.n,
+      holdReached: be.holdReached,
+      vrReached: be.vrReached,
+      vrFasterPct: btPct(be.vrFaster, be.bothReached),
+      medianHoldDays: btMedian(be.holdDays),
+      medianVrDays: btMedian(be.vrDays)
+    } : null
+  };
+}
+
+// 시작가에서 위(+up)와 아래(-down) 중 어느 쪽에 먼저 닿았는지 센다
+function btBandTouchOdds(bars, opts) {
+  const { up, down } = opts;
+  const starts = btStartIndices(bars, opts.crashDrawdown || 0, BT_YEAR_BARS);
+  const count = { up60: 0, down60: 0, up252: 0, down252: 0 };
+  starts.forEach(s => {
+    const upper = bars[s].c * (1 + up);
+    const lower = bars[s].c * (1 - down);
+    for (let i = s + 1; i <= s + BT_YEAR_BARS; i++) {
+      const hitUp = bars[i].h >= upper;
+      const hitDown = bars[i].l <= lower;
+      if (!hitUp && !hitDown) continue;
+      const within60 = i - s <= 60;
+      if (hitUp && !hitDown) {
+        count.up252++;
+        if (within60) count.up60++;
+      } else if (hitDown && !hitUp) {
+        count.down252++;
+        if (within60) count.down60++;
+      }
+      break;
+    }
+  });
+  return {
+    n: starts.length,
+    up60Pct: btPct(count.up60, starts.length),
+    down60Pct: btPct(count.down60, starts.length),
+    neither60Pct: btPct(starts.length - count.up60 - count.down60, starts.length),
+    up252Pct: btPct(count.up252, starts.length),
+    down252Pct: btPct(count.down252, starts.length)
+  };
 }
 
 // 레버리지·1배 ETF·현금 사이를 종가에 옮기는 규칙들 (옮길 때마다 매도·매수 수수료)

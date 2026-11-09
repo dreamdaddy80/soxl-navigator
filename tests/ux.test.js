@@ -89,11 +89,10 @@ test('시장 위치 문구는 사실만 서술하고 행동을 권하지 않는�
   assert.ok(!app.els['ind-rsi-status'].textContent.includes('유리'));
 });
 
-test('헤더 배지는 현재 규칙을 보여 주고 차트 안내와 같은 용어를 쓴다', () => {
+test('헤더 배지는 현재 규칙을 보여 준다', () => {
   const app = appWith();
   app.run('renderToday()');
   assert.strictEqual(app.els['rule-badge'].textContent, '현재 규칙: VR');
-  assert.ok(app.els['chart-rule-notice'].innerHTML.includes('<strong>반등 회전</strong>'));
   app.run('setPlanRule("ROTATION")');
   assert.strictEqual(app.els['rule-badge'].textContent, '현재 규칙: 반등 회전');
 });

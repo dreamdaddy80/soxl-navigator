@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>SOXL · TQQQ 올인원 투자 네비게이터</title>
-  <link rel="stylesheet" href="styles.css?v=20261108-18" />
+  <link rel="stylesheet" href="styles.css?v=20261108-19" />
   <!-- TradingView Widget Script -->
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 </head>
@@ -190,8 +190,6 @@
               <h2>보조지표와 산출 근거</h2>
             </div>
 
-            <div id="chart-rule-notice" class="rule-notice" style="display:none;"></div>
-
             <div class="live-quote-bar">
               <div>
                 <span class="quote-ticker">당일 저가 ~ 고가</span>
@@ -203,7 +201,7 @@
               </div>
             </div>
 
-            <div class="strategy-mode-bar compact-pill-bar">
+            <div class="strategy-mode-bar compact-pill-bar" id="chart-mode-bar">
               <span class="mode-label">반등 기준 (<button type="button" class="term" data-term="회전">회전</button> 규칙에만 적용)</span>
               <div class="mode-btns">
                 <button type="button" class="mode-btn mode-short-btn" onclick="setTargetMode('SHORT')">짧은 회전 +4.5%</button>
@@ -227,19 +225,19 @@
                   <small class="ind-status" id="ind-sma20-status">단기 저항·지지선</small>
                 </div>
                 <div class="ind-item sell-target-item">
-                  <span class="ind-name">회전 규칙 매도가 (1차 / 2차)</span>
+                  <span class="ind-name" id="ind-sell-name">회전 규칙 매도가 (1차 / 2차)</span>
                   <strong class="ind-val is-sell" id="ind-sell-target">-</strong>
                   <small class="ind-status" id="ind-sell-basis">선택한 반등 기준 적용</small>
                 </div>
                 <div class="ind-item buy-target-item">
-                  <span class="ind-name">회전 규칙 재매수가 (1차 / 2차)</span>
+                  <span class="ind-name" id="ind-buy-name">회전 규칙 재매수가 (1차 / 2차)</span>
                   <strong class="ind-val is-buy" id="ind-buy-target">-</strong>
                   <small class="ind-status" id="ind-buy-basis">단기 눌림목 지지선</small>
                 </div>
               </div>
             </div>
 
-            <button type="button" class="btn-secondary btn-block" onclick="applyAutoTargetsToSimulator(); switchView('rescue');">이 타점으로 탈출 시뮬레이션</button>
+            <button type="button" class="btn-secondary btn-block" id="chart-sim-btn" onclick="openSimulatorFromChart()">이 타점으로 탈출 시뮬레이션</button>
           </div>
           </div>
 
@@ -248,7 +246,7 @@
             <div class="card-header">
               <div>
                 <h2 id="chart-title">SOXL 차트 (볼린저밴드 + RSI)</h2>
-                <p class="chart-helper">회전 규칙의 매도 참고선: 20일 중심선·상단선 또는 RSI 60 이상 · 재매수 참고선: 하단선 또는 RSI 38 이하</p>
+                <p class="chart-helper" id="chart-helper">회전 규칙의 매도 참고선: 20일 중심선·상단선 또는 RSI 60 이상 · 재매수 참고선: 하단선 또는 RSI 38 이하</p>
               </div>
             </div>
             <div id="tv_chart_container" class="tv-chart-box"></div>
@@ -288,11 +286,9 @@
         <div class="page-title-bar">
           <div>
             <h1>원금 <button type="button" class="term term-title" data-term="탈출">탈출</button> 시뮬레이터</h1>
-            <p>반등에 일부 팔고 눌림목에서 다시 사 주식 수를 늘리는 계산입니다. 왕복 수수료 0.2%와 정수 주문을 반영하며, 두 주문이 모두 체결된다고 가정합니다.</p>
+            <p id="rescue-intro">반등에 일부 팔고 눌림목에서 다시 사 주식 수를 늘리는 계산입니다. 왕복 수수료 0.2%와 정수 주문을 반영하며, 두 주문이 모두 체결된다고 가정합니다.</p>
           </div>
         </div>
-
-        <div id="rescue-rule-notice" class="rule-notice" style="display:none;"></div>
 
         <div class="subtabs" role="tablist" aria-label="탈출시뮬 화면">
           <button type="button" role="tab" class="subtab active" id="subtab-rescue-sim" aria-selected="true" aria-controls="panel-rescue-sim" onclick="setSubTab('rescue', 'sim')">시뮬레이터</button>
@@ -303,7 +299,8 @@
 
         <div class="subtab-panel active" id="panel-rescue-sim" role="tabpanel" aria-labelledby="subtab-rescue-sim">
           <div class="conclusion-card" id="concl-rescue-sim"></div>
-          <div class="card">
+          <div id="rescue-sim-vr" style="display:none;"></div>
+          <div class="card" id="rescue-sim-rotation">
             <div class="sim-result-banner">
               <div class="result-col">
                 <span class="res-label">1회전 성공 시 총 보유 주식</span>
@@ -423,7 +420,7 @@
         <div class="subtab-panel" id="panel-rescue-scenario" role="tabpanel" aria-labelledby="subtab-rescue-scenario">
           <div class="conclusion-card" id="concl-rescue-scenario"></div>
           <div class="card">
-            <p class="bt-intro">시뮬레이터는 매도와 재매수가 모두 체결된 경우만 보여줍니다. 실제로는 아래 네 갈래 중 하나가 됩니다. 숫자는 시뮬레이터 설정과 내 보유 현황으로 계산합니다.</p>
+            <p class="bt-intro" id="scenario-intro">시뮬레이터는 매도와 재매수가 모두 체결된 경우만 보여줍니다. 실제로는 아래 네 갈래 중 하나가 됩니다. 숫자는 시뮬레이터 설정과 내 보유 현황으로 계산합니다.</p>
             <div id="scenario-result"></div>
           </div>
         </div>
@@ -432,10 +429,10 @@
           <div class="conclusion-card" id="concl-rescue-backtest"></div>
           <div class="card">
             <div class="card-header">
-              <h2>이 회전 규칙이 실제로 통했나?</h2>
+              <h2 id="bt-card-title">이 회전 규칙이 실제로 통했나?</h2>
               <button type="button" class="btn-secondary" onclick="runRotationBacktest()">과거 일봉으로 검증</button>
             </div>
-            <p class="bt-intro">시뮬레이터의 매도가·매도 비율·재매수가를 상장 이후 실제 일봉에 적용해, 같은 날 시작해서 <strong>그냥 보유했을 때</strong>와 비교합니다.</p>
+            <p class="bt-intro" id="bt-intro-text">시뮬레이터의 매도가·매도 비율·재매수가를 상장 이후 실제 일봉에 적용해, 같은 날 시작해서 <strong>그냥 보유했을 때</strong>와 비교합니다.</p>
             <p class="bt-rule" id="bt-rot-rule"></p>
             <div class="bt-options">
               <div class="input-group">
@@ -445,7 +442,7 @@
                   <option value="all">모든 거래일</option>
                 </select>
               </div>
-              <div class="input-group">
+              <div class="input-group" id="bt-rot-timeout-group">
                 <label for="bt-rot-timeout">재매수 대기 한도</label>
                 <select id="bt-rot-timeout" onchange="renderRotationBacktest()">
                   <option value="0" selected>없음 · 눌림목이 올 때까지 (앱 기본 규칙)</option>
@@ -841,25 +838,26 @@
   </aside>
   <div class="term-popover" id="term-popover" role="tooltip" aria-live="polite" hidden></div>
 
-  <script src="js/format.js?v=20261108-18"></script>
-  <script src="js/ledger.js?v=20261108-18"></script>
-  <script src="js/state.js?v=20261108-18"></script>
-  <script src="js/indicators.js?v=20261108-18"></script>
-  <script src="js/quotes.js?v=20261108-18"></script>
-  <script src="js/backtest.js?v=20261108-18"></script>
-  <script src="js/alerts.js?v=20261108-18"></script>
-  <script src="js/analytics.js?v=20261108-18"></script>
-  <script src="js/daily-plan.js?v=20261108-18"></script>
-  <script src="js/ui-shell.js?v=20261108-18"></script>
-  <script src="js/ui-core.js?v=20261108-18"></script>
-  <script src="js/ui-backup.js?v=20261108-18"></script>
-  <script src="js/ui-growth.js?v=20261108-18"></script>
-  <script src="js/ui-backtest.js?v=20261108-18"></script>
-  <script src="js/ui-rescue.js?v=20261108-18"></script>
-  <script src="js/ui-journal.js?v=20261108-18"></script>
-  <script src="js/ui-analytics.js?v=20261108-18"></script>
-  <script src="js/ui-today.js?v=20261108-18"></script>
-  <script src="js/main.js?v=20261108-18"></script>
+  <script src="js/format.js?v=20261108-19"></script>
+  <script src="js/ledger.js?v=20261108-19"></script>
+  <script src="js/state.js?v=20261108-19"></script>
+  <script src="js/indicators.js?v=20261108-19"></script>
+  <script src="js/quotes.js?v=20261108-19"></script>
+  <script src="js/backtest.js?v=20261108-19"></script>
+  <script src="js/alerts.js?v=20261108-19"></script>
+  <script src="js/analytics.js?v=20261108-19"></script>
+  <script src="js/daily-plan.js?v=20261108-19"></script>
+  <script src="js/ui-shell.js?v=20261108-19"></script>
+  <script src="js/ui-core.js?v=20261108-19"></script>
+  <script src="js/ui-backup.js?v=20261108-19"></script>
+  <script src="js/ui-growth.js?v=20261108-19"></script>
+  <script src="js/ui-backtest.js?v=20261108-19"></script>
+  <script src="js/ui-rescue.js?v=20261108-19"></script>
+  <script src="js/ui-journal.js?v=20261108-19"></script>
+  <script src="js/ui-analytics.js?v=20261108-19"></script>
+  <script src="js/ui-vr.js?v=20261108-19"></script>
+  <script src="js/ui-today.js?v=20261108-19"></script>
+  <script src="js/main.js?v=20261108-19"></script>
   <div id="alert-toast-area" class="alert-toast-area" aria-live="polite"></div>
 </body>
 </html>

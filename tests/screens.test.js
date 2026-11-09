@@ -5,6 +5,7 @@ const { boot, syntheticBars, readProjectFile, localScripts } = require('./helper
 const { bars, baseBars } = syntheticBars();
 
 function setPrices(app, cur = 27.27, sell = 29.72, buy = 26.75) {
+  app.run('appState.tickers.SOXL.planRule = "ROTATION"'); // 이 파일은 회전 규칙 화면을 검사한다
   app.run(`appState.tickers.SOXL.currentPrice = ${cur}`);
   app.run('appState.tickers.SOXL.growth.seedConfirmed = 1');
   app.run(`document.getElementById('sim-sell-price').value = '${sell}'`);

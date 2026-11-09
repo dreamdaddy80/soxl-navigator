@@ -113,6 +113,38 @@ function computeVrOrders(value, shares, cash) {
   };
 }
 
+// 화면에 보여 줄 VR 주문: 오늘의 주문이 있으면 그 값(직접 조정 포함), 없으면 공식으로 계산
+function vrTargets(t) {
+  const plan = t.dailyPlan;
+  if (plan && plan.stage === 'VR' && plan.ledgerKey === planLedgerKey(t)) {
+    return { price: plan.price, shares: plan.shares, buyPrice: plan.buyPrice, buyShares: plan.buyShares };
+  }
+  return t.vrValue > 0 && t.shares > 0 ? computeVrOrders(t.vrValue, t.shares, t.reservedCash || 0) : null;
+}
+
+// 같은 V에서 한쪽 주문이 연달아 체결될 때의 수량·현금 변화. first는 첫 단계로 쓸 실제 주문
+function simulateVrLadder(value, shares, cash, side, first, steps = 4) {
+  const rows = [];
+  let curShares = shares;
+  let curCash = cash;
+  for (let i = 0; i < steps && curShares > 0; i++) {
+    const next = computeVrOrders(value, curShares, curCash);
+    const order = i === 0 && first
+      ? first
+      : side === 'SELL' ? { price: next.price, shares: next.shares } : { price: next.buyPrice, shares: next.buyShares };
+    if (!order || !(order.shares > 0)) break;
+    if (side === 'SELL') {
+      curShares -= order.shares;
+      curCash += order.shares * order.price * (1 - TRADING_FEE_RATE);
+    } else {
+      curShares += order.shares;
+      curCash -= order.shares * order.price * (1 + TRADING_FEE_RATE);
+    }
+    rows.push({ side, price: order.price, qty: order.shares, shares: curShares, cash: Math.max(0, curCash) });
+  }
+  return rows;
+}
+
 // V를 처음 정하거나 2주가 지났으면 올린다. V를 아직 정할 수 없으면 false
 function ensureVrValue(t, session) {
   if (!isVrRule(t) || t.shares <= 0) return true;

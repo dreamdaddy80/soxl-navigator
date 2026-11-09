@@ -298,20 +298,6 @@ function renderTodayGrowthRow(t) {
   `;
 }
 
-// 오늘의 주문이 VR일 때, 회전 규칙으로 계산하는 화면에 다른 규칙임을 알린다 (배지와 같은 용어를 쓴다)
-function renderRuleNotices(t) {
-  const notices = {
-    'rescue-rule-notice': '이 화면은 <strong>반등 회전</strong> 규칙을 비교해 보는 계산기입니다. 현재 규칙은 <strong>VR 규칙</strong>이라 실제 주문의 수량과 가격이 다릅니다.',
-    'chart-rule-notice': '아래 목표가는 <strong>반등 회전</strong> 규칙 기준입니다. 현재 규칙은 <strong>VR 규칙</strong>이라 실제 주문 가격이 다릅니다.'
-  };
-  Object.entries(notices).forEach(([id, text]) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.style.display = isVrRule(t) ? '' : 'none';
-    el.innerHTML = `<span>${text}</span><button type="button" class="text-link-btn" onclick="switchView('overview')">오늘의 주문</button>`;
-  });
-}
-
 function todayTodoText(t) {
   const plan = t.dailyPlan;
   if (!plan) return '시세 확인 중';
@@ -356,7 +342,6 @@ function renderTodayAlerts(t) {
 function renderToday() {
   const t = appState.tickers[appState.currentTicker];
   renderRuleBadge(t);
-  renderRuleNotices(t);
   const session = currentMarketSession();
   renderTodaySession(session);
   renderTodayPosition(t);
@@ -364,6 +349,7 @@ function renderToday() {
   renderTodayGrowthRow(t);
   renderTodayAlerts(t);
   if (!todayPanel) renderTodayOrder(t, session);
+  renderRuleScreens(t); // 오늘의 주문이 정해진 뒤에 그려야 같은 가격이 나온다
   renderStatusStrip(t);
   renderPriceAlerts(); // 알림 버튼은 방금 정한 오늘의 주문 가격을 쓴다
 }
@@ -388,6 +374,8 @@ function setPlanRule(rule) {
   todayPanel = null;
   saveState();
   renderToday();
+  runSimulator(false, false);
+  renderRotationBacktest();
 }
 
 function resetVrBase() {
@@ -397,6 +385,7 @@ function resetVrBase() {
   todayPanel = null;
   saveState();
   renderToday();
+  renderRotationBacktest();
 }
 
 function addTodayAlert(kind) {
