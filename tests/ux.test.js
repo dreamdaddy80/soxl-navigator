@@ -6,12 +6,12 @@ const { boot, syntheticBars } = require('./helpers/harness');
 const WINTER_REGULAR = Date.UTC(2026, 11, 15, 15, 0); // 뉴욕 12/15(화) 10:00
 const soxl = app => app.run('appState.tickers.SOXL');
 
-const REAL_POSITION = {
-  baseShares: 727, baseAvgPrice: 101, originalPrincipal: 73427, baseCash: 0, shares: 727, avgPrice: 101, currentPrice: 52.45
+const SAMPLE_POSITION = {
+  baseShares: 500, baseAvgPrice: 80, originalPrincipal: 40000, baseCash: 0, shares: 500, avgPrice: 80, currentPrice: 52.45
 };
 
 function appWith(ticker = {}, growth = {}) {
-  const app = boot({ saved: { tickers: { SOXL: { ...REAL_POSITION, ...ticker, growth: { totalBudget: 73427, splits: 40, targetProfitPct: 10, history: [], ...growth } } } } });
+  const app = boot({ saved: { tickers: { SOXL: { ...SAMPLE_POSITION, ...ticker, growth: { totalBudget: 40000, splits: 40, targetProfitPct: 10, history: [], ...growth } } } } });
   app.run(`Date.now = () => ${WINTER_REGULAR}`);
   app.run(`Object.assign(appState.tickers.SOXL, { currentPrice: 52.45, prevClose: 52, lastQuoteAt: ${WINTER_REGULAR}, dayHigh: 52.45, dayLow: 52.45 })`);
   return app;
@@ -42,7 +42,7 @@ test('시드: 회복 목표 원금과 같은 시드는 비워 보여 주되 저�
   assert.strictEqual(app.els['g-one-unit-usd'].textContent, '-');
   assert.ok(app.els['g-seed-notice'].textContent.includes('가용 현금은 $0.00'));
   assert.ok(app.els['g-buy-orders-content'].innerHTML.includes('시드를 입력하면'));
-  assert.strictEqual(soxl(app).growth.totalBudget, 73427);
+  assert.strictEqual(soxl(app).growth.totalBudget, 40000);
 });
 
 test('시드: 입력하면 확정되고 가용 현금보다 크면 경고한다', () => {
@@ -59,22 +59,22 @@ test('시드: 입력하면 확정되고 가용 현금보다 크면 경고한다'
 });
 
 test('시드: 40분할 기록이 있으면 저장된 시드를 그대로 쓴다', () => {
-  const app = appWith({}, { ...heldGrowth, seedConfirmed: 0, totalBudget: 73427 });
+  const app = appWith({}, { ...heldGrowth, seedConfirmed: 0, totalBudget: 40000 });
   app.run('populateInputsFromState(); recalcGrowthMode(false)');
-  assert.strictEqual(app.els['g-total-budget'].value, 73427);
-  assert.strictEqual(app.els['g-one-unit-usd'].textContent, '$1,835.68');
+  assert.strictEqual(app.els['g-total-budget'].value, 40000);
+  assert.strictEqual(app.els['g-one-unit-usd'].textContent, '$1,000.00');
 });
 
 test('RSI 부스터면 1회분과 오늘 배정액의 차이를 옆에 설명한다', () => {
-  const app = appWith({ rsi: 30.4, bbLower: 50 }, { ...heldGrowth, totalBudget: 73427, seedConfirmed: 1 });
+  const app = appWith({ rsi: 30.4, bbLower: 50 }, { ...heldGrowth, totalBudget: 40000, seedConfirmed: 1 });
   app.run('appState.tickers.SOXL.rsi = 30.4; recalcGrowthMode(false)');
-  assert.ok(app.els['g-buy-total-budget'].textContent.includes('$2,753.51'));
-  assert.ok(app.els['g-buy-budget-note'].textContent.includes('1회분 $1,835.68 × 1.5'));
-  assert.ok(app.els['g-one-unit-krw'].textContent.includes('×1.5 = $2,753.51'));
+  assert.ok(app.els['g-buy-total-budget'].textContent.includes('$1,500.00'));
+  assert.ok(app.els['g-buy-budget-note'].textContent.includes('1회분 $1,000.00 × 1.5'));
+  assert.ok(app.els['g-one-unit-krw'].textContent.includes('×1.5 = $1,500.00'));
 });
 
 test('체결되면 영역은 본전 변화량과 이유를 함께 보여 준다', () => {
-  const app = appWith({ vrValue: 38131.15, vrNextUpdate: '2026-12-29' });
+  const app = appWith({ vrValue: 26225, vrNextUpdate: '2026-12-29' });
   app.run('renderToday()');
   const html = app.els['today-order'].innerHTML;
   assert.match(html, /본전 \+\$\d+\.\d\d ↑ \(손실 구간 매도로 남은 주식의 본전이 올라감\)/);
@@ -160,11 +160,11 @@ test('긴 표는 핵심 행만 보이고 펼칠 수 있다', () => {
 });
 
 test('시세 출처 필드가 생겨도 예전 백업과 호환된다', () => {
-  const old = { tickers: { SOXL: { ...REAL_POSITION, marketSessionLabel: '🟢 최근 정규장 마감·체결 주가', logs: [] } } };
+  const old = { tickers: { SOXL: { ...SAMPLE_POSITION, marketSessionLabel: '🟢 최근 정규장 마감·체결 주가', logs: [] } } };
   const app = boot({ saved: old });
   assert.strictEqual(soxl(app).quoteSource, '');
-  assert.strictEqual(soxl(app).shares, 727);
+  assert.strictEqual(soxl(app).shares, 500);
   const backup = app.run('JSON.stringify(appState)');
   const again = boot({ saved: JSON.parse(backup) });
-  assert.strictEqual(soxl(again).originalPrincipal, 73427);
+  assert.strictEqual(soxl(again).originalPrincipal, 40000);
 });
